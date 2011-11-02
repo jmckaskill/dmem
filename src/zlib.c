@@ -41,7 +41,7 @@ int dz_deflate(d_Vector(char)* out, z_stream* z, d_Slice(char) str, int flush)
     z->avail_in = str.size;
 
     for (;;) {
-        dv_reserve(out, bufsz);
+        dv_reserve(out, out->size + bufsz);
         z->next_out = (uint8_t*) out->data + out->size;
         z->avail_out = dv_reserved(*out) - out->size;
 
@@ -59,7 +59,7 @@ int dz_deflate(d_Vector(char)* out, z_stream* z, d_Slice(char) str, int flush)
 
         dv_resize(out, z->next_out - (uint8_t*) out->data);
 
-        if (z->avail_out > 0 || z->avail_in > 0) {
+        if (z->avail_out == 0 || z->avail_in > 0) {
             continue;
         }
 
@@ -69,7 +69,7 @@ int dz_deflate(d_Vector(char)* out, z_stream* z, d_Slice(char) str, int flush)
     }
 }
 
-int dz_inflate(d_Vector(char)* out, z_stream* z, d_Slice(char) str)
+int dz_inflate(d_Vector(char)* out, z_stream* z, d_Slice(char) str, d_Slice(char) dict)
 {
     int err;
     int bufsz = str.size * 2;
@@ -78,18 +78,20 @@ int dz_inflate(d_Vector(char)* out, z_stream* z, d_Slice(char) str)
     z->avail_in = str.size;
 
     for (;;) {
-        dv_reserve(out, bufsz);
+        dv_reserve(out, out->size + bufsz);
         z->next_out = (uint8_t*) out->data + out->size;
         z->avail_out = dv_reserved(*out) - out->size;
 
         err = inflate(z, Z_SYNC_FLUSH);
-        if (err != Z_OK && err != Z_STREAM_END) {
+	if (err == Z_NEED_DICT) {
+	    inflateSetDictionary(z, (uint8_t*) dict.data, dict.size);
+	} else if (err != Z_OK && err != Z_STREAM_END) {
             return err;
         }
 
         dv_resize(out, z->next_out - (uint8_t*) out->data);
 
-        if (z->avail_in == 0) {
+        if ((err == Z_OK || err == Z_STREAM_END) && z->avail_in == 0) {
             return err;
         }
     }

@@ -29,8 +29,13 @@
 #define _ISOC99_SOURCE
 #define DMEM_LIBRARY
 
-#include <dmem/char.h>
+#ifdef _WIN32
+#include <rpc.h>
+#else
 #include <uuid/uuid.h>
+#endif
+
+#include <dmem/char.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <math.h>
@@ -43,6 +48,10 @@
 #include <alloca.h>
 #endif
 
+#if defined _MSC_VER && !defined NAN
+#include <ymath.h>
+#define NAN _Nan._Double
+#endif
 
 #ifndef va_copy
 #   ifdef _MSC_VER
@@ -607,9 +616,14 @@ d_Slice(char) dv_strip_whitespace(d_Slice(char) s)
 
 void dv_generate_uuid(d_Vector(char)* out)
 {
-    uuid_t id;
-    uuid_generate(id);
-    dv_append_hex_encoded(out, dv_char2((char*) id, sizeof(id)));
+#ifdef _WIN32
+    UUID id;
+    UuidCreate(&id);
+#else
+    struct {uuid_t id} id;
+    uuid_generate(id.id);
+#endif
+    dv_append_hex_encoded(out, dv_char2((char*) &id, sizeof(id)));
 }
 
 /* ------------------------------------------------------------------------- */
