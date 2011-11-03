@@ -69,3 +69,76 @@ void* dv_resize_base(void* p, int newsz)
     return cp;
 }
 
+/* ------------------------------------------------------------------------- */
+
+#ifndef DV_HAVE_MEMMEM
+void* dv_memmem(const void* hay, size_t hlen, const void* needle, size_t nlen)
+{
+    uint8_t* p = (uint8_t*) hay;
+    uint8_t* last_first = p + hlen - nlen;
+
+    if (nlen == 0) {
+        return p;
+    }
+
+    while (p < last_first) {
+        p = (uint8_t*) dv_memchr(p, *(uint8_t*) needle, last_first - p);
+        if (!p) {
+            return NULL;
+        }
+
+        if (memcmp(p, needle, nlen) == 0) {
+            return p;
+        }
+
+        p++;
+    }
+
+    return NULL;
+}
+#endif
+
+/* ------------------------------------------------------------------------- */
+
+#ifndef DV_HAVE_MEMRMEM
+void* dv_memrmem(const void* hay, size_t hlen, const void* needle, size_t nlen)
+{
+    uint8_t* p = (uint8_t*) hay + hlen;
+    uint8_t* last_first = p - nlen;
+
+    if (nlen == 0) {
+        return p;
+    }
+
+    while (p >= (uint8_t*) hay) {
+        p = (uint8_t*) dv_memrchr(p, *(uint8_t*) needle, last_first - p);
+        if (!p) {
+            return NULL;
+        }
+
+        if (memcmp(p, needle, nlen) == 0) {
+            return p;
+        }
+
+        p--;
+    }
+
+    return NULL;
+}
+#endif
+
+/* ------------------------------------------------------------------------- */
+
+#ifndef DV_HAVE_MEMRCHR
+void* dv_memrchr(const void* s, int c, size_t n)
+{
+    uint8_t* p = (uint8_t*) s;
+    while (p >= (uint8_t*) s) {
+        if (*p == c) {
+            return p;
+        }
+        p--;
+    }
+    return NULL;
+}
+#endif

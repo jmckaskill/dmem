@@ -36,6 +36,32 @@
 
 /* ------------------------------------------------------------------------- */
 
+#ifdef __GLIBC__
+#define DV_HAVE_MEMMEM
+#define DV_HAVE_MEMRCHR
+#elif defined __APPLE__
+#define DV_HAVE_MEMMEM
+#endif
+
+#ifdef DV_HAVE_MEMMEM
+#define dv_memmem(h, hl, n, nl) memmem(h, hl, n, nl)
+#else
+DMEM_API void* dv_memmem(const void* hay, size_t haylen, const void* needle, size_t needlelen);
+#endif
+
+#ifdef DV_HAVE_MEMRCHR
+#define dv_memrchr(s, c, n) memrchr(s, c, n)
+#else
+DMEM_API void* dv_memrchr(const void* s, int c, size_t n);
+#endif
+
+/* always available */
+#define dv_memchr memchr
+
+DMEM_API void* dv_memrmem(const void* hay, size_t haylen, const void* needle, size_t needlelen);
+
+/* ------------------------------------------------------------------------- */
+
 /* Declares a new vector d_Vector(name) and slice d_Slice(name) that holds
  * 'type' data values
  */
