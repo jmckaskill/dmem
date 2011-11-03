@@ -86,6 +86,7 @@ DMEM_API void dv_append_url_encoded(d_Vector(char)* to, d_Slice(char) from);
 
 /* Will return the entire slice if sep can not be found */
 DMEM_API d_Slice(char) dv_split_left(d_Slice(char)* from, char sep);
+DMEM_API d_Slice(char) dv_split_line(d_Slice(char)* from);
 
 /* ------------------------------------------------------------------------- */
 

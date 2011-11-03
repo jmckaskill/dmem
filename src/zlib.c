@@ -47,8 +47,9 @@ int dz_deflate(d_Vector(char)* out, z_stream* z, d_Slice(char) str, int flush)
 
         err = deflate(z, flush);
 
-        // Someone trying to force a flush with a empty string, but the stream
-        // was already flushed.
+        /* Someone trying to force a flush with a empty string, but the stream
+         * was already flushed.
+         */
         if (err == Z_BUF_ERROR && str.size == 0) {
             err = Z_OK;
         }
@@ -69,7 +70,7 @@ int dz_deflate(d_Vector(char)* out, z_stream* z, d_Slice(char) str, int flush)
     }
 }
 
-int dz_inflate(d_Vector(char)* out, z_stream* z, d_Slice(char) str, d_Slice(char) dict)
+int dz_inflate_dict(d_Vector(char)* out, z_stream* z, d_Slice(char) str, d_Slice(char) dict)
 {
     int err;
     int bufsz = str.size * 2;
@@ -83,9 +84,13 @@ int dz_inflate(d_Vector(char)* out, z_stream* z, d_Slice(char) str, d_Slice(char
         z->avail_out = dv_reserved(*out) - out->size;
 
         err = inflate(z, Z_SYNC_FLUSH);
-	if (err == Z_NEED_DICT) {
-	    inflateSetDictionary(z, (uint8_t*) dict.data, dict.size);
-	} else if (err != Z_OK && err != Z_STREAM_END) {
+
+        if (err == Z_NEED_DICT && dict.size) {
+            inflateSetDictionary(z, (uint8_t*) dict.data, dict.size);
+        } else if (err != Z_OK && err != Z_STREAM_END) {
+            if (err > 0) {
+                err = Z_STREAM_ERROR;
+            }
             return err;
         }
 
@@ -96,4 +101,7 @@ int dz_inflate(d_Vector(char)* out, z_stream* z, d_Slice(char) str, d_Slice(char
         }
     }
 }
+
+int dz_inflate(d_Vector(char)* out, z_stream* z, d_Slice(char) str)
+{ return dz_inflate_dict(out, z, str, C("")); }
 

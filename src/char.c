@@ -620,7 +620,7 @@ void dv_generate_uuid(d_Vector(char)* out)
     UUID id;
     UuidCreate(&id);
 #else
-    struct {uuid_t id} id;
+    struct {uuid_t id;} id;
     uuid_generate(id.id);
 #endif
     dv_append_hex_encoded(out, dv_char2((char*) &id, sizeof(id)));
@@ -667,6 +667,15 @@ d_Slice(char) dv_split_left(d_Slice(char)* from, char sep)
         *from = dv_right(*from, idx + 1);
     }
 
+    return ret;
+}
+
+d_Slice(char) dv_split_line(d_Slice(char)* from)
+{
+    d_Slice(char) ret = dv_split_left(from, '\n');
+    if (ret.size && ret.data[ret.size-1] == '\r') {
+        ret.size--;
+    }
     return ret;
 }
 

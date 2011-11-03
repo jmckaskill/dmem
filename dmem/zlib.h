@@ -31,5 +31,6 @@
 #include <zlib.h>
 
 int dz_deflate(d_Vector(char)* out, z_stream* z, d_Slice(char) str, int flush);
-int dz_inflate(d_Vector(char)* out, z_stream* z, d_Slice(char) str, d_Slice(char) dict);
+int dz_inflate(d_Vector(char)* out, z_stream* z, d_Slice(char) str);
+int dz_inflate_dict(d_Vector(char)* out, z_stream* z, d_Slice(char) str, d_Slice(char) dict);
 
