@@ -62,8 +62,13 @@ DMEM_INLINE void dv_clear_string_vector(d_Vector(char_vector)* vec)
 /* ------------------------------------------------------------------------- */
 
 /* Macro to convert char string literals into a d_Slice(char) */
+#if __STDC_VERSION__+0 == 199901L
+#define C(STR) ((d_Slice(char)) {sizeof(STR)-1, STR})
+#define C2(P, LEN) ((d_Slice(char)) {P, LEN})
+#else
 #define C(STR) dv_char2((char*) STR, sizeof(STR) - 1)
 #define C2(P, LEN) dv_char2((char*) P, LEN)
+#endif
 
 /* Macro to convert a d_Slice(char) to a std::string */
 #define dv_to_string(slice) std::string((slice).data, (slice).data + (slice).size)
@@ -109,6 +114,7 @@ DMEM_API bool dv_has_next_line2(d_Slice(char) s, d_Slice(char)* line, int* used)
  * optionally coloured using inline ansi terminal colour commands.
  */
 DMEM_API void dv_append_hex_dump(d_Vector(char)* s, d_Slice(char) data, bool colors);
+DMEM_API void dv_set_log_color(bool color);
 DMEM_API void dv_log(d_Slice(char) data, const char* format, ...);
 
 /* ------------------------------------------------------------------------- */

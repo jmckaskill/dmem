@@ -29,6 +29,7 @@
 #include <dmem/vector.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <stdio.h>
 
 /* ------------------------------------------------------------------------- */
 
@@ -55,7 +56,7 @@ void* dv_resize_base(void* p, int newsz)
 
         assert((alloc / 8) * 8 == alloc);
 
-        cp = (char*) realloc(cp ? cp - 8 : NULL, alloc + 16);
+        cp = (char*) realloc(cp ? cp - 8 : NULL, alloc + 9);
         if (cp) {
             *((uint64_t*) cp) = alloc;
             cp += 8;
@@ -63,7 +64,7 @@ void* dv_resize_base(void* p, int newsz)
     }
 
     if (cp) {
-        *((uint64_t*) &cp[newsz]) = 0;
+        cp[newsz] = 0;
     }
 
     return cp;
