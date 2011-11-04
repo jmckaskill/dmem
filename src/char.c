@@ -29,12 +29,6 @@
 #define _ISOC99_SOURCE
 #define DMEM_LIBRARY
 
-#ifdef _WIN32
-#include <rpc.h>
-#else
-#include <uuid/uuid.h>
-#endif
-
 #include <dmem/char.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -537,20 +531,6 @@ d_Slice(char) dv_strip_whitespace(d_Slice(char) s)
     s.size -= p - s.data;
     s.data = p;
     return s;
-}
-
-/* ------------------------------------------------------------------------- */
-
-void dv_generate_uuid(d_Vector(char)* out)
-{
-#ifdef _WIN32
-    UUID id;
-    UuidCreate(&id);
-#else
-    struct {uuid_t id;} id;
-    uuid_generate(id.id);
-#endif
-    dv_append_hex_encoded(out, dv_char2((char*) &id, sizeof(id)));
 }
 
 /* ------------------------------------------------------------------------- */

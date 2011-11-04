@@ -128,8 +128,6 @@ DMEM_API void dv_load_token(dv_tokenizer* tok, d_Slice(char) str, const char* de
  */
 DMEM_API d_Slice(char) dv_next_token(dv_tokenizer* tok);
 
-DMEM_API void dv_generate_uuid(d_Vector(char)* out);
-
 /* ------------------------------------------------------------------------- */
 
 /* Returns a slice for the null terminated string 'str' */
