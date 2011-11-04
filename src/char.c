@@ -42,6 +42,10 @@
 #include <alloca.h>
 #endif
 
+#ifndef _WIN32
+#include <unistd.h>
+#endif
+
 #if defined _MSC_VER && !defined NAN
 #include <ymath.h>
 #define NAN _Nan._Double
@@ -414,32 +418,119 @@ d_Slice(char) dv_next_token(dv_tokenizer* tok)
 #define NORMAL  "\033[m"
 #define GREY    "\033[1;30m"
 
-void dv_append_hex_dump(d_Vector(char)* s, d_Slice(char) data, bool colors)
+#define BYTES_PER_LINE (8 /*header*/ + 12*4 /*hex*/ + 4 /*spaces and \n*/ + 16/*ascii*/)
+
+static const char lookup_hex[] = "0123456789abcdef";
+#define hex(p, v) ((p)[0] = lookup_hex[((v) & 0xFF) >> 4], (p)[1] = lookup_hex[v & 0x0F])
+
+#ifdef BIG_ENDIAN
+#define u32(p, h, mh, ml, l) (*((uint32_t*) p) = ((uint32_t) (h)) | ((uint32_t) (mh) << 8) | ((uint32_t) (ml) << 16) | ((uint32_t) (l) << 24))
+#else
+#define u32(p, h, mh, ml, l) (*((uint32_t*) p) = ((uint32_t) (h) << 24) | ((uint32_t) (mh) << 16) | ((uint32_t) (ml) << 8) | ((uint32_t) (l)))
+#endif
+
+static void append_hex_dump(d_Vector(char)* s, d_Slice(char) data)
 {
     int i, j;
-    uint8_t* buf = (uint8_t*) data.data;
+    uint8_t* d = (uint8_t*) data.data;
+    char* p = dv_append_buffer(s, (data.size + 15) / 16 * BYTES_PER_LINE);
+
+    for (i = 0; i+16 < data.size; i += 16) {
+        u32(p+0, ' ', '\t', '0', 'x');
+        hex(p+4, i >> 8);
+        hex(p+6, i);
+        p += 8;
+
+        for (j = i; j < i+16; j+=4) {
+            u32(p, ' ', '\b', ' ', ' ');
+            hex(p+4, d[j]);
+            hex(p+6, d[j+1]);
+            hex(p+8, d[j+2]);
+            hex(p+10, d[j+3]);
+            p += 12;
+        }
+
+        *(p++) = ' ';
+        *(p++) = ' ';
+#ifndef _WIN32
+        *(p++) = ' ';
+#endif
+
+        for (j = i; j < i+16; j++) {
+            *(p++) = dv_isprint(d[j]) ? d[j] : '.';
+        }
+
+#ifdef _WIN32
+        *(p++) = '\r';
+#endif
+        *(p++) = '\n';
+    }
+
+    if (data.size == i) {
+        return;
+    }
+
+    u32(p+0, ' ', '\t', '0', 'x');
+    hex(p+4, i >> 8);
+    hex(p+6, i);
+    u32(p+8, ' ', ' ', ' ', ' ');
+    p += 12;
+
+    for (j = i; j < data.size; j++) {
+        if (j & 3) {
+            u32(p, ' ', '\b', ' ', ' ');
+            p += 4;
+        }
+
+        hex(p, d[j]);
+        p += 2;
+    }
+
+    for (; j < data.size; j++) {
+        if (j & 3) {
+            u32(p, ' ', '\b', ' ', ' ');
+            p += 4;
+        }
+
+        *(p++) = ' ';
+        *(p++) = ' ';
+    }
+
+    *(p++) = ' ';
+    *(p++) = ' ';
+#ifndef _WIN32
+    *(p++) = ' ';
+#endif
+
+    for (j = i; j < data.size; j++) {
+        *(p++) = dv_isprint(d[j]) ? d[j] : '.';
+    }
+
+#ifdef _WIN32
+    *(p++) = '\r';
+#endif
+    *(p++) = '\n';
+}
+
+static void append_hex_dump_color(d_Vector(char)* s, d_Slice(char) data)
+{
+    int i, j;
+    uint8_t* d = (uint8_t*) data.data;
 
     for (i = 0; i < data.size; i += 16) {
         int spaces = 40;
         int end = min(i + 16, data.size);
 
-        dv_print(s, "\t%s0x%04x    ", colors ? CYAN : "", i);
+        dv_print(s, "\t" CYAN "0x%04x    ", i);
 
         for (j = i; j < end; j++) {
+            if (j > i && (j & 3) == 0) {
+                spaces -= 2;
+                dv_append(s, C("  "));
+            }
+
             spaces -= 2;
-
-            if (colors) {
-                dv_print(s, "%s%02x",
-                        dv_isprint(buf[j]) ? NORMAL : RED,
-                        (int) buf[j]);
-            } else {
-                dv_print(s, "%02x", (int) buf[j]);
-            }
-
-            if (j > 0 && j % 2) {
-                spaces -= 1;
-                dv_append(s, C(" "));
-            }
+            dv_print(s, "%s%02x", (dv_isprint(d[j]) ? NORMAL : RED), d[j]);
         }
 
         if (spaces > 0) {
@@ -448,15 +539,57 @@ void dv_append_hex_dump(d_Vector(char)* s, d_Slice(char) data, bool colors)
         }
 
         for (j = i; j < end; j++) {
-            if (dv_isprint(buf[j])) {
-                dv_print(s, "%s%c", colors ? NORMAL : "", (int) buf[j]);
+            if (d[j] == '\r') {
+                dv_append(s, C(YELLOW "R"));
+            } else if (d[j] == '\n') {
+                dv_append(s, C(YELLOW "N"));
+            } else if (d[j] == '\t') {
+                dv_append(s, C(YELLOW "T"));
+            } else if (d[j] == '\0') {
+                dv_append(s, C(YELLOW "0"));
+            } else if (dv_isprint(d[j])) {
+                dv_print(s, NORMAL "%c", d[j]);
             } else {
-                dv_print(s, "%s.", colors ? RED : "");
+                dv_append(s, C(RED "."));
             }
         }
 
-        dv_print(s, "%s\n", colors ? NORMAL : "");
+        dv_append(s, C(NORMAL "\n"));
     }
+}
+
+void dv_append_hex_dump(d_Vector(char)* s, d_Slice(char) data, bool colors)
+{
+    if (colors) {
+        append_hex_dump(s, data);
+    } else {
+        append_hex_dump(s, data);
+    }
+}
+
+void dv_log(d_Slice(char) data, const char* format, ...)
+{
+    va_list ap;
+    d_Vector(char) s = DV_INIT;
+
+    va_start(ap, format);
+    dv_vprint(&s, format, ap);
+    va_end(ap);
+
+    if (s.size && s.data[s.size-1] != '\n') {
+        dv_append1(&s, '\n');
+    }
+
+    if (data.size) {
+#ifdef _WIN32
+        append_hex_dump(&s, data);
+#else
+        dv_append_hex_dump(&s, data, isatty(2));
+#endif
+    }
+
+    fwrite(s.data, 1, s.size, stderr);
+    dv_free(s);
 }
 
 /* ------------------------------------------------------------------------- */
