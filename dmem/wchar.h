@@ -85,10 +85,10 @@ DMEM_INLINE d_Slice(wchar) dv_utf16(const uint16_t* wstr, size_t sz)
 /* ------------------------------------------------------------------------- */
 
 /* Appends a UTF8 encoded version of the UTF16 in 'from' to 'str'. */
-DMEM_API void dv_append_from_utf16(d_Vector(char)* str, d_Slice(wchar) from);
+DMEM_API void dv_to_utf8(d_Vector(char)* str, d_Slice(wchar) from);
 
 /* Appends a UTF16 encoded version of the UTF8 in 'from' to 'wstr'. */
-DMEM_API void dv_append_from_utf8(d_Vector(wchar)* wstr, d_Slice(char) from);
+DMEM_API void dv_to_utf16(d_Vector(wchar)* wstr, d_Slice(char) from);
 
 /* ------------------------------------------------------------------------- */
 

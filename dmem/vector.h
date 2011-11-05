@@ -108,15 +108,29 @@ DMEM_API void* dv_memrmem(const void* hay, size_t haylen, const void* needle, si
 #define d_Vector(name) d_vector_##name
 #define d_Slice(name) d_slice_##name
 
+/* Declare some basic vectors for the built in types */
+DVECTOR_INIT(char, char);
 DVECTOR_INIT(int, int);
-
 
 /* ------------------------------------------------------------------------- */
 
-#define dv_datasize(VEC) ((int) sizeof((VEC).data[0]))
-#define dv_pdatasize(PVEC) ((int) sizeof((PVEC)->data[0]))
-#define dv_reserve(PVEC, NEWSZ) ((PVEC)->data = dv_resize_base((PVEC)->data, (NEWSZ) * dv_pdatasize(PVEC)))
-#define dv_reserved(VEC) ((VEC).data ? (int) ((uint64_t*) (VEC).data)[-1] : 0)
+#ifdef __cplusplus
+template <class T> inline
+T* dv_cast(T* p, void* u)
+{ (void) p; return (T*) u; }
+#else
+#define dv_cast(DATA, PTR) (PTR)
+#endif
+
+#define dv_datasize(VEC) ((int) sizeof((VEC).data[(VEC).size]))
+#define dv_pdatasize(PVEC) ((int) sizeof((PVEC)->data[(PVEC)->size]))
+
+DMEM_API void* dv_resize_base(void* p, int newsz);
+DMEM_API void dv_free_base(void* p);
+DMEM_API void* dv_append_buffer_base(d_Vector(char)* v, int num, int typesz);
+DMEM_API void* dv_append_zeroed_base(d_Vector(char)* v, int num, int typesz);
+DMEM_API void* dv_insert_buffer_base(d_Vector(char)* v, int idx, int num, int typesz);
+DMEM_API void* dv_insert_zeroed_base(d_Vector(char)* v, int idx, int num, int typesz);
 
 /* ------------------------------------------------------------------------- */
 
@@ -126,28 +140,32 @@ DVECTOR_INIT(int, int);
 /* ------------------------------------------------------------------------- */
 
 /* Resets the vector 'PVEC' to size zero */
-#define dv_clear(PVEC) ((void) ((PVEC)->size = 0, (PVEC)->data && (*((uint64_t*) (PVEC)->data) = 0)))
+#define dv_clear(PVEC) ((PVEC)->size = 0)
 
 /* ------------------------------------------------------------------------- */
+
+/* Reserves enough space in the vector to hold 'newsz' values */
+#define dv_reserve(PVEC, NEWSZ) ((PVEC)->data = dv_cast((PVEC)->data, dv_resize_base((PVEC)->data, (NEWSZ) * dv_pdatasize(PVEC))))
+#define dv_reserved(VEC) ((VEC).data ? (int) ((uint64_t*) (VEC).data)[-1] : 0)
 
 /* Resizes the vector to hold 'newsz' values */
 #define dv_resize(PVEC, NEWSZ) ((PVEC)->size = NEWSZ, dv_reserve(PVEC, (PVEC)->size))
 
 /* ------------------------------------------------------------------------- */
 
-/* Adds space for NUM values at 'INDEX' in the vector and returns a pointer to
- * the added space - INDEX and NUM are evaluated only once before the resize
+/* Adds space for NUM values at 'IDX' in the vector and returns a pointer to
+ * the added space - IDX and NUM are evaluated only once before the resize
  * occurs. The _zeroed form also zeros the added buffer.
  */
-#define dv_insert_buffer(PVEC, INDEX, NUM) dv_insert_buffer_(&(PVEC)->data, &(PVEC)->size, INDEX, NUM, dv_pdatasize(PVEC))
-#define dv_insert_zeroed(PVEC, INDEX, NUM) dv_insert_zeroed_(&(PVEC)->data, &(PVEC)->size, INDEX, NUM, dv_pdatasize(PVEC))
+#define dv_insert_buffer(PVEC, IDX, NUM) dv_cast((PVEC)->data, dv_insert_buffer_base((d_Vector(char)*) (PVEC), IDX, NUM, dv_pdatasize(PVEC)))
+#define dv_insert_zeroed(PVEC, IDX, NUM) dv_cast((PVEC)->data, dv_insert_zeroed_base((d_Vector(char)*) (PVEC), IDX, NUM, dv_pdatasize(PVEC)))
 
 /* Adds space for NUM values at the end of the vector and returns a pointer to
  * the beginning of the added space - NUM is only evaluated once before the
  * append occurs. The _zeroed form also zeros the added buffer.
  */
-#define dv_append_buffer(PVEC, NUM) dv_append_buffer_(&(PVEC)->data, &(PVEC)->size, NUM, dv_pdatasize(PVEC))
-#define dv_append_zeroed(PVEC, NUM) dv_append_zeroed_(&(PVEC)->data, &(PVEC)->size, NUM, dv_pdatasize(PVEC))
+#define dv_append_buffer(PVEC, NUM) dv_cast((PVEC)->data, dv_append_buffer_base((d_Vector(char)*) (PVEC), NUM, dv_pdatasize(PVEC)))
+#define dv_append_zeroed(PVEC, NUM) dv_cast((PVEC)->data, dv_append_zeroed_base((d_Vector(char)*) (PVEC), NUM, dv_pdatasize(PVEC)))
 
 /* ------------------------------------------------------------------------- */
 
@@ -157,31 +175,34 @@ DVECTOR_INIT(int, int);
 #define dv_append2(PTO, DATA, SZ)                                           \
     do {                                                                    \
         STATIC_ASSERT(sizeof((DATA)[0]) == dv_pdatasize(PTO));              \
-        const void* _data_ = DATA;                                          \
-        int _sz_ = SZ;                                                      \
-        (PTO)->data = dv_resize_base((PTO)->data, dv_pdatasize(PTO) * (_sz_ + (PTO)->size)); \
-        memcpy((PTO)->data + (PTO)->size, _data_, _sz_ * dv_pdatasize(PTO));\
-        (PTO)->size += _sz_;                                                \
+        const void* _fromdata = DATA;                                       \
+        int _fromsz = SZ;                                                   \
+        int _tosz = (PTO)->size;                                            \
+        (PTO)->size += _fromsz;                                             \
+        dv_reserve(PTO, (PTO)->size);                                       \
+        memcpy((PTO)->data + _tosz, _fromdata, _fromsz * dv_pdatasize(PTO));\
     } while(0)
 
 /* ------------------------------------------------------------------------- */
 
+/* Append a single value 'VALUE' to the vector 'PTO'. VALUE is only evaluated
+ * once.
+ */
 #define dv_append1(PTO, VALUE)                                              \
     do {                                                                    \
-        (PTO)->data = dv_resize_base((PTO)->data, dv_pdatasize(PTO) * ((PTO)->size + 1));\
-        (PTO)->data[(PTO)->size] = (VALUE);                                 \
-        (PTO)->size += 1;                                                   \
+        dv_reserve(PTO, (PTO)->size + 1);                                   \
+        (PTO)->data[(PTO)->size++] = (VALUE);                               \
     } while (0)
+
+/* ------------------------------------------------------------------------- */
 
 /* Appends the vector FROM to PTO - they must be of the same type - FROM is
  * only evaluated once.
  */
-
 #ifdef __cplusplus
-template <class To, class From>
-void dv_append(To* PTO, From _from)
-{ dv_append2(PTO, _from.data, _from.size); }
-
+template <class T, class F> inline
+void dv_append(T* to, F from)
+{ dv_append2(to, from.data, from.size); }
 #else
 #define dv_append(PTO, FROM)                                                \
     do {                                                                    \
@@ -189,12 +210,12 @@ void dv_append(To* PTO, From _from)
         int _tosz, _fromsz;                                                 \
         _todata = (PTO)->data;                                              \
         _tosz = (PTO)->size;                                                \
-        *(PTO) = (FROM);                                                    \
+        *(PTO) = (FROM); /* only eval FROM once */                          \
         _fromdata = (PTO)->data;                                            \
         _fromsz = (PTO)->size;                                              \
-        (PTO)->data = dv_resize_base(_todata, dv_pdatasize(PTO) * (_tosz + _fromsz)); \
+        (PTO)->data = dv_cast((PTO)->data, _todata);                        \
+        dv_resize(PTO, _fromsz + _tosz);                                    \
         memcpy((PTO)->data + _tosz, _fromdata, _fromsz * dv_pdatasize(PTO));\
-        (PTO)->size = _fromsz + _tosz;                                      \
     } while (0)
 #endif
 
@@ -203,12 +224,32 @@ void dv_append(To* PTO, From _from)
 /* Sets 'PTO' to be a copy of 'DATA' of size 'SZ' - DATA and SZ are only
  * evaluated once.
  */
-#define dv_set2(PTO, DATA, SZ) do { (PTO)->size = 0; dv_append2(PTO, DATA, SZ); } while(0)
+#define dv_set2(PTO, DATA, SZ)                                              \
+    do {                                                                    \
+        STATIC_ASSERT(sizeof((DATA)[0]) == dv_pdatasize(PTO));              \
+        dv_resize(PTO, SZ);                                                 \
+        memcpy(PTO, DATA, (PTO)->size * dv_pdatasize(PTO));                 \
+    } while(0)
 
 /* ------------------------------------------------------------------------- */
 
 /* Sets 'PTO' to be a copy of 'FROM' */
-#define dv_set(PTO, FROM) do { (PTO)->size = 0; dv_append(PTO, FROM); } while(0)
+#ifdef __cplusplus
+template <class T, class F> inline
+void dv_set(T* to, F from)
+{ dv_set2(to, from.data, from.size); }
+#else
+#define dv_set(PTO, FROM)                                                   \
+    do {                                                                    \
+        void *_todata, *_fromdata;                                          \
+        _todata = (PTO)->data;                                              \
+        *(PTO) = (FROM); /* only eval FROM once */                          \
+        _fromdata = (PTO)->data;                                            \
+        (PTO)->data = _todata;                                              \
+        dv_reserve(PTO, (PTO)->size);                                       \
+        memcpy((PTO)->data, _fromdata, (PTO)->size * dv_pdatasize(PTO));    \
+    } while(0)
+#endif
 
 /* ------------------------------------------------------------------------- */
 
@@ -225,27 +266,24 @@ void dv_append(To* PTO, From _from)
 /* ------------------------------------------------------------------------- */
 
 /* Inserts a copy of 'FROM' at index 'INDEX' in 'PTO' */
-
 #ifdef __cplusplus
-template <class To, class From>
-void dv_insert(To* PTO, int INDEX, From FROM)
-{ dv_insert2(PTO, INDEX, FROM.data, FROM.size); }
-
+template <class T, class U> inline
+void dv_insert(T* to, int idx, U from)
+{ dv_insert2(to, idx, from.data, from.size); }
 #else
 #define dv_insert(PTO, INDEX, FROM)                                         \
     do {                                                                    \
-        void* buf;                                                          \
         void* _todata, *_fromdata;                                          \
         int _tosz, _fromsz;                                                 \
         _todata = (PTO)->data;                                              \
         _tosz = (PTO)->size;                                                \
-        *(PTO) = (FROM);                                                    \
+        *(PTO) = (FROM); /* only eval FROM once */                          \
         _fromdata = (PTO)->data;                                            \
         _fromsz = (PTO)->size;                                              \
-        (PTO)->data = _todata;                                              \
+        (PTO)->data = dv_cast((PTO)->data, _todata);                        \
         (PTO)->size = _tosz;                                                \
-        buf = dv_insert_buffer(PTO, INDEX, _fromsz);                        \
-        memcpy(buf, _fromdata, _fromsz * dv_pdatasize(PTO));                \
+        _todata = dv_insert_buffer(PTO, INDEX, _fromsz);                    \
+        memcpy(_todata, _fromdata, _fromsz * dv_pdatasize(PTO));            \
     } while (0)
 #endif
 
@@ -309,126 +347,22 @@ void dv_insert(To* PTO, int INDEX, From FROM)
         }                                                                   \
     } while (0)                                                             \
 
-
-
 /* ------------------------------------------------------------------------- */
 
-/* Does a memcmp between the data in VEC1 and VEC2 */
+/* Does a memcmp between the data in VEC1 and VEC2. Evaluates VEC1 and VEC2
+ * multiple times. */
 #define dv_cmp(VEC1, VEC2) ((VEC1).size == (VEC2).size ? memcmp((VEC1).data, (VEC2).data, (VEC1).size * dv_datasize(VEC1)) : (VEC2).size - (VEC1).size)
 
-/* Returns VEC1 == VEC2 */
+/* Returns VEC1 == VEC2. Evaluats VEC1 and VEC2 multiple times. */
 #define dv_equals(VEC1, VEC2) ((VEC1).size == (VEC2).size && 0 == memcmp((VEC1).data, (VEC2).data, (VEC1).size * dv_datasize(VEC1)))
 
 /* Returns the last value in the vector - note the vector must be non-empty. */
 #define dv_last(VEC) ((VEC).data[(VEC).size - 1])
 
+/* Returns whether the char slice/vector 'VEC' begins with the slice 'TEST'.
+ * Evaluates VEC and TEST multiple times. */
+#define dv_begins_with(VEC, TEST) ((VEC).size > (TEST).size && 0 == memcmp((VEC).data, (TEST).data, (TEST).size * dv_datasize(VEC)))
 
-
-
-
-
-
-
-
-
-
-
-
-/* Implementation declarations and inlines */
-
-/* ------------------------------------------------------------------------- */
-
-DMEM_API void* dv_resize_base(void* p, int newsz);
-DMEM_API void dv_free_base(void* p);
-
-#ifdef __cplusplus
-template <class T>
-T* dv_resize_base(T* p, int newsz)
-{ return (T*) dv_resize_base((void*) p, newsz); }
-#endif
-
-/* ------------------------------------------------------------------------- */
-
-#ifdef __cplusplus
-template <class T>
-DMEM_INLINE T* dv_insert_buffer_(T** data, int* size, int off, int num, int datasize)
-{
-    *data = (T*) dv_resize_base(*data, (*size + num) * datasize);
-    memmove(*data + off + num, *data + off, (*size - off) * datasize);
-    *size += num;
-    return *data + off;
-}
-
-template <class T>
-DMEM_INLINE T* dv_insert_zeroed_(T** data, int* size, int off, int num, int datasize)
-{
-    *data = (T*) dv_resize_base(data, (*size + num) * datasize);
-    memmove(*data + off + num, *data + off, (*size - off) * datasize);
-    memset(*data + off, 0, num * datasize);
-    *size += num;
-    return *data + off;
-}
-
-template <class T>
-DMEM_INLINE T* dv_append_buffer_(T** data, int* size, int num, int datasize)
-{
-    int sz = *size;
-    *data = (T*) dv_resize_base(data, (*size + num) * datasize);
-    *size += num;
-    return *data + sz;
-}
-
-template <class T>
-DMEM_INLINE T* dv_append_zeroed_(T** data, int* size, int num, int datasize)
-{
-    int sz = *size;
-    *data = (T*) dv_resize_base(data, (*size + num) * datasize);
-    memset(*data + sz, 0, num * datasize);
-    *size += num;
-    return *data + sz;
-}
-
-/* ------------------------------------------------------------------------- */
-
-#else /* !__cplusplus */
-DMEM_INLINE void* dv_insert_buffer_(void* pdata, int* size, int off, int num, int datasize)
-{
-    char** data = (char**) pdata;
-    *data = dv_resize_base(*data, (*size + num) * datasize);
-    memmove(*data + (datasize * (off + num)), *data + (datasize * off), (*size - off) * datasize);
-    *size += num;
-    return *data + (off * datasize);
-}
-
-DMEM_INLINE void* dv_insert_zeroed_(void* pdata, int* size, int off, int num, int datasize)
-{
-    char** data = (char**) pdata;
-    *data = dv_resize_base(*data, (*size + num) * datasize);
-    memmove(*data + (datasize * (off + num)), *data + (datasize * off), (*size - off) * datasize);
-    memset(*data + (off * datasize), 0, num * datasize);
-    *size += num;
-    return *data + (off * datasize);
-}
-
-DMEM_INLINE void* dv_append_buffer_(void* pdata, int* size, int num, int datasize)
-{
-    char** data = (char**) pdata;
-    int sz = *size;
-    *data = dv_resize_base(*data, (*size + num) * datasize);
-    *size += num;
-    return *data + (sz * datasize);
-}
-
-DMEM_INLINE void* dv_append_zeroed_(void* pdata, int* size, int num, int datasize)
-{
-    char** data = (char**) pdata;
-    int sz = *size;
-    *data = dv_resize_base(*data, (*size + num) * datasize);
-    memset(*data + (sz * datasize), 0, num * datasize);
-    *size += num;
-    return *data + (sz * datasize);
-}
-
-#endif
-
-
+/* Returns whether the char slice/vector 'VEC' ends with the slice 'TEST'.
+ * Evaluates VEC and TEST multiple times. */
+#define dv_ends_with(VEC, TEST) ((VEC).size > (TEST).size && 0 == memcmp((VEC).data + (VEC).size - (TEST).size, (TEST).data, (TEST).size * dv_datasize(VEC)))

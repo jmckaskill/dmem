@@ -56,7 +56,7 @@ void* dv_resize_base(void* p, int newsz)
 
         assert((alloc / 8) * 8 == alloc);
 
-        cp = (char*) realloc(cp ? cp - 8 : NULL, alloc + 9);
+        cp = (char*) realloc(cp ? cp - 8 : NULL, alloc + 10);
         if (cp) {
             *((uint64_t*) cp) = alloc;
             cp += 8;
@@ -65,9 +65,49 @@ void* dv_resize_base(void* p, int newsz)
 
     if (cp) {
         cp[newsz] = 0;
+        cp[newsz+1] = 0;
     }
 
     return cp;
+}
+
+/* ------------------------------------------------------------------------- */
+
+void* dv_append_buffer_base(d_Vector(char)* v, int num, int typesz)
+{
+    int oldsz = v->size * typesz;
+    v->size += num;
+    v->data = (char*) dv_resize_base(v->data, v->size * typesz);
+    return v->data + oldsz;
+}
+
+void* dv_append_zeroed_base(d_Vector(char)* v, int num, int typesz)
+{
+    void* ret = dv_append_buffer_base(v, num, typesz);
+    memset(ret, 0, num * typesz);
+    return ret;
+}
+
+/* ------------------------------------------------------------------------- */
+
+void* dv_insert_buffer_base(d_Vector(char)* v, int idx, int num, int typesz)
+{
+    char* s;
+    char* e;
+    int after = (v->size - idx) * typesz;
+    v->size += num;
+    v->data = (char*) dv_resize_base(v->data, v->size * typesz);
+    s = v->data + (idx * typesz);
+    e = s + (num * typesz);
+    memmove(e, s, after);
+    return s;
+}
+
+void* dv_insert_zeroed_base(d_Vector(char)* v, int idx, int num, int typesz)
+{
+    void* ret = dv_insert_buffer_base(v, idx, num, typesz);
+    memset(ret, 0, num * typesz);
+    return ret;
 }
 
 /* ------------------------------------------------------------------------- */

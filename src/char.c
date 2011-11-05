@@ -34,6 +34,11 @@
 #include <stdint.h>
 #include <math.h>
 #include <assert.h>
+#include <limits.h>
+
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 #ifdef _MSC_VER
 #include <malloc.h>
@@ -113,6 +118,13 @@ int dv_vprint(d_Vector(char)* v, const char* format, va_list ap)
     }
 }
 
+int dv_print(d_Vector(char)* v, const char* format, ...)
+{
+    va_list ap;
+    va_start(ap, format);
+    return dv_vprint(v, format, ap);
+}
+
 /* ------------------------------------------------------------------------- */
 
 static const char g_base64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -138,7 +150,7 @@ static void ToBase64(uint8_t src[3], char dest[4])
     dest[3] = g_base64[(int) dest[3]];
 }
 
-void dv_append_base64_encoded(d_Vector(char)* v, d_Slice(char) from)
+void dv_base64_encode(d_Vector(char)* v, d_Slice(char) from)
 {
     uint8_t* up = (uint8_t*) from.data;
     uint8_t* uend = up + from.size;
@@ -175,7 +187,7 @@ void dv_append_base64_encoded(d_Vector(char)* v, d_Slice(char) from)
 
 /* -------------------------------------------------------------------------- */
 
-void dv_append_hex_decoded(d_Vector(char)* to, d_Slice(char) from)
+void dv_hex_decoded(d_Vector(char)* to, d_Slice(char) from)
 {
     int i;
     uint8_t* ufrom = (uint8_t*) from.data;
@@ -221,7 +233,7 @@ err:
 
 /* -------------------------------------------------------------------------- */
 
-void dv_append_hex_encoded(d_Vector(char)* to, d_Slice(char) from)
+void dv_hex_encode(d_Vector(char)* to, d_Slice(char) from)
 {
     int i;
     uint8_t* ufrom = (uint8_t*) from.data;
@@ -250,7 +262,7 @@ void dv_append_hex_encoded(d_Vector(char)* to, d_Slice(char) from)
 
 /* -------------------------------------------------------------------------- */
 
-void dv_append_url_decoded(d_Vector(char)* to, d_Slice(char) from)
+void dv_url_decoded(d_Vector(char)* to, d_Slice(char) from)
 {
     const char* b = from.data;
     const char* e = from.data + from.size;
@@ -265,7 +277,7 @@ void dv_append_url_decoded(d_Vector(char)* to, d_Slice(char) from)
                 return;
             }
 
-            dv_append_hex_decoded(to, dv_char2(p + 1, 2));
+            dv_hex_decoded(to, dv_char2(p + 1, 2));
 
             p += 3;
             b = p;
@@ -286,7 +298,7 @@ void dv_append_url_decoded(d_Vector(char)* to, d_Slice(char) from)
 
 /* -------------------------------------------------------------------------- */
 
-void dv_append_url_encoded(d_Vector(char)* to, d_Slice(char) from)
+void dv_url_encode(d_Vector(char)* to, d_Slice(char) from)
 {
     const char* b = from.data;
     const char* e = b + from.size;
@@ -314,89 +326,6 @@ void dv_append_url_encoded(d_Vector(char)* to, d_Slice(char) from)
 
 /* -------------------------------------------------------------------------- */
 
-bool dv_has_next_line2(d_Slice(char) s, d_Slice(char)* line, int* used)
-{
-    const char* start = s.data + *used;
-    const char* end = s.data + s.size;
-    const char* nl = (const char*) memchr(start, '\n', end - start);
-
-    if (nl) {
-        *used = (int) (nl + 1 - s.data);
-
-        if (nl > start && nl[-1] == '\r') {
-            nl--;
-        }
-
-        *line = dv_char2(start, (int) (nl - start));
-        return true;
-
-    } else {
-        line->data = NULL;
-        line->size = 0;
-        return false;
-    }
-}
-
-bool dv_has_next_line(d_Slice(char) s, d_Slice(char)* line)
-{
-    int used = 0;
-    const char* data = s.data;
-
-    if (line->data) {
-        used = line->data + line->size - data;
-        if (used < s.size && data[used] == '\r') used++;
-        if (used < s.size && data[used] == '\n') used++;
-    }
-
-    return dv_has_next_line2(s, line, &used);
-}
-
-
-/* -------------------------------------------------------------------------- */
-
-#define test(map, val) (map[(val) >> 5] & (1 << ((val) & 31)))
-#define set(map, val) map[(val) >> 5] |= 1 << ((val) & 31)
-
-void dv_load_token(dv_tokenizer* tok, d_Slice(char) s, const char* delim)
-{
-    const uint8_t* udelim = (const uint8_t*) delim;
-    int i, ch;
-
-    for (i = 0; i < 8; i++) {
-        tok->map[i] = 0;
-    }
-
-    while ((ch = *(udelim++)) != 0) {
-        set(tok->map, ch);
-    }
-
-    tok->next = (const uint8_t*) s.data;
-    tok->end = tok->next + s.size;
-}
-
-d_Slice(char) dv_next_token(dv_tokenizer* tok)
-{
-    d_Slice(char) ret;
-    const uint8_t* p = tok->next;
-
-    while (p < tok->end && test(tok->map, *p)) {
-        p++;
-    }
-
-    ret.data = (char*) p;
-
-    while (p < tok->end && !test(tok->map, *p)) {
-        p++;
-    }
-
-    ret.size = (int) ((char*) p - ret.data);
-    tok->next = p;
-
-    return ret;
-}
-
-/* -------------------------------------------------------------------------- */
-
 #ifndef min
 #   define min(x, y) ((x < y) ? (x) : (y))
 #endif
@@ -408,7 +337,7 @@ d_Slice(char) dv_next_token(dv_tokenizer* tok)
 static const char lookup_hex[] = "0123456789abcdef";
 #define hex(p, v) ((p)[0] = lookup_hex[((v) & 0xFF) >> 4], (p)[1] = lookup_hex[v & 0x0F], (p) + 2)
 
-#if __LITTLE_ENDIAN__ || __ARMEL__
+#if __LITTLE_ENDIAN__ || __ARMEL__ || defined __i386__ || defined __amd64__ || defined _M_X86 || defined _M_X64
 #define u32(p, h, mh, ml, l) (*((uint32_t*) p) = ((uint32_t) (h)) | ((uint32_t) (mh) << 8) | ((uint32_t) (ml) << 16) | ((uint32_t) (l) << 24), (p) + 4)
 #elif __BIG_ENDIAN__ || __ARMEB__
 #define u32(p, h, mh, ml, l) (*((uint32_t*) p) = ((uint32_t) (h) << 24) | ((uint32_t) (mh) << 16) | ((uint32_t) (ml) << 8) | ((uint32_t) (l)), (p) + 4)
@@ -440,7 +369,7 @@ static char* set_red(char* p, int* color)
     return p;
 }
 
-static char* do_line(char* p, int off, char* d, int n, int* color)
+static char* do_line(char* p, int off, const char* d, int n, int* color)
 {
     uint8_t* u = (uint8_t*) d;
     int i;
@@ -610,7 +539,7 @@ static char* do_line(char* p, int off, char* d, int n, int* color)
     return set_normal(p, color);
 }
 
-void dv_append_hex_dump(d_Vector(char)* s, d_Slice(char) data, bool colors)
+void dv_hex_dump(d_Vector(char)* s, d_Slice(char) data, bool colors)
 {
     int i, color;
 
@@ -640,17 +569,21 @@ void dv_append_hex_dump(d_Vector(char)* s, d_Slice(char) data, bool colors)
     }
 }
 
-static bool g_color;
-
-void dv_set_log_color(bool color)
-{ g_color = color; }
-
 void dv_log(d_Slice(char) data, const char* format, ...)
 {
     /* use a uint32_t to ensure the buffer is 4 byte aligned */
     uint32_t buf[BYTES_PER_LINE/4];
     int i, color;
     va_list ap;
+    static int colored = -1;
+
+    if (colored == -1) {
+#ifdef _WIN32
+        colored = 0;
+#else
+        colored = isatty(fileno(stderr));
+#endif
+    }
 
     va_start(ap, format);
     vfprintf(stderr, format, ap);
@@ -660,7 +593,7 @@ void dv_log(d_Slice(char) data, const char* format, ...)
 
     for (i = 0; i < data.size; i += 16) {
         int n = min(16, data.size - i);
-        char* e = do_line((char*)&buf[0], i, &data.data[i], n, g_color ? &color : NULL);
+        char* e = do_line((char*)&buf[0], i, &data.data[i], n, colored ? &color : NULL);
         assert(e - (char*)&buf[0] <= BYTES_PER_LINE);
         fwrite(buf, 1, e - (char*)&buf[0], stderr);
     }
@@ -690,18 +623,26 @@ double dv_to_number(d_Slice(char) value)
 
 int dv_to_integer(d_Slice(char) value, int radix, int defvalue)
 {
-    long ret;
-    char* end;
-    char* buf = (char*) alloca(value.size + 1);
+    char buf[sizeof(int)*CHAR_BIT+2]; /* worst case is binary including the -ve */
+    char* p = (char*) value.data;
+    char* e = p + value.size;
+    int copy, ret;
 
-    memcpy(buf, value.data, value.size);
-    buf[value.size] = '\0';
-    ret = strtol(buf, &end, radix);
+    while (dv_isspace(*p) && p < e) {
+        p++;
+    }
 
-    if (*end == '\0' || dv_isspace(*end))
-      return ret;
-    else
-      return defvalue;
+    copy = min(sizeof(buf)-1, e - p);
+    memcpy(buf, p, copy);
+    buf[copy] = '\0';
+
+    ret = (int) strtol(buf, &e, radix);
+
+    if (*e && !dv_isspace(*e)) {
+        return defvalue;
+    }
+
+    return ret;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -723,7 +664,7 @@ bool dv_to_boolean(d_Slice(char) value)
 
 d_Slice(char) dv_strip_whitespace(d_Slice(char) s)
 {
-    char* p = s.data + s.size;
+    char* p = (char*) s.data + s.size;
 
     while (p >= s.data && dv_isspace(p[-1])) {
         p--;
@@ -742,51 +683,61 @@ d_Slice(char) dv_strip_whitespace(d_Slice(char) s)
 
 /* ------------------------------------------------------------------------- */
 
-void dv_replace_string(d_Vector(char)* s, d_Slice(char) from, d_Slice(char) to)
-{
-    int idx = 0;
-    for (;;) {
-        int find = dv_find_string(dv_right(*s, idx), from);
-
-        if (find < 0) {
-            return;
-        }
-
-        idx += find;
-
-        if (from.size >= to.size) {
-            memcpy(&s->data[idx], to.data, to.size);
-            dv_erase(s, idx + to.size, from.size - to.size);
-        } else {
-            memcpy(&s->data[idx], to.data, from.size);
-            dv_insert(s, idx + from.size, dv_right(to, from.size));
-        }
-
-        idx += to.size;
-    }
-}
-
-/* ------------------------------------------------------------------------- */
-
-d_Slice(char) dv_split_left(d_Slice(char)* from, char sep)
+d_Slice(char) dv_split(d_Slice(char)* from, int sep)
 {
     d_Slice(char) ret;
-    int idx = dv_find_char(*from, sep);
+    char* p = (char*) memchr(from->data, sep, from->size);
 
-    if (idx < 0) {
-        ret = *from;
-        *from = dv_right(*from, from->size);
+    if (p) {
+        ret.data = from->data;
+        ret.size = p - from->data;
+        from->data = p + 1;
+        from->size -= ret.size + 1;
     } else {
-        ret = dv_left(*from, idx);
-        *from = dv_right(*from, idx + 1);
+        ret = *from;
+        from->data += from->size;
+        from->size = 0;
     }
 
     return ret;
 }
 
+/* -------------------------------------------------------------------------- */
+
+#define test(map, val) (map[(val) >> 5] & (1 << ((val) & 31)))
+#define set(map, val) map[(val) >> 5] |= 1 << ((val) & 31)
+
+d_Slice(char) dv_split2(d_Slice(char)* from, d_Slice(char) sep)
+{
+    uint32_t map[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    uint8_t *u = (uint8_t*) from->data;
+    d_Slice(char) ret;
+    int i;
+
+    for (i = 0; i < sep.size; i++) {
+        set(map, sep.data[i]);
+    }
+
+    for (i = 0; i < from->size; i++) {
+        if (test(map, u[i])) {
+            ret = dv_left(*from, i);
+            *from = dv_right(*from, i + 1);
+            return ret;
+        }
+    }
+
+    ret = *from;
+    from->data += from->size;
+    from->size = 0;
+
+    return ret;
+}
+
+/* ------------------------------------------------------------------------- */
+
 d_Slice(char) dv_split_line(d_Slice(char)* from)
 {
-    d_Slice(char) ret = dv_split_left(from, '\n');
+    d_Slice(char) ret = dv_split(from, '\n');
     if (ret.size && ret.data[ret.size-1] == '\r') {
         ret.size--;
     }
@@ -795,141 +746,125 @@ d_Slice(char) dv_split_line(d_Slice(char)* from)
 
 /* ------------------------------------------------------------------------- */
 
-#ifndef NDEBUG
-static void TestPath(void)
+/* Ported from go path.Clean by go authors
+ *
+ * Clean returns the shortest path name equivalent to path
+ * by purely lexical processing.  It applies the following rules
+ * iteratively until no further processing can be done:
+ *
+ *	1. Replace multiple slashes with a single slash.
+ *	2. Eliminate each . path name element (the current directory).
+ *	3. Eliminate each inner .. path name element (the parent directory)
+ *	   along with the non-.. element that precedes it.
+ *	4. Eliminate .. elements that begin a rooted path:
+ *	   that is, replace "/.." by "/" at the beginning of a path.
+ *
+ * If the result of this process is an empty string, Clean
+ * returns the string ".".
+ *
+ * See also Rob Pike, ``Lexical File Names in Plan 9 or
+ * Getting Dot-Dot right,''
+ * http://plan9.bell-labs.com/sys/doc/lexnames.html
+ */
+static int clean_path(char* buf, int existing, d_Slice(char) pstr)
 {
-    d_Vector(char) p = DV_INIT;
+    int r, w, dotdot, n;
+    bool rooted;
+    const char *path;
 
-#define TEST(from, to)                                                      \
-    dv_clear(&p);                                                           \
-    dv_append_normalised_path(&p, C(from));                                 \
-    assert(dv_equals(p, C(to)))
-
-    TEST("/", "/");
-    TEST("/..", "/");
-    TEST("/../", "/");
-    TEST("//", "/");
-    TEST("/./", "/");
-    TEST("/.//", "/");
-    TEST("/foo/..", "/");
-    TEST("/foo/../", "/");
-    TEST("/foo/.", "/foo");
-    TEST("/foo/./", "/foo");
-    TEST("/foo/bar", "/foo/bar");
-    TEST("/foo/bar/", "/foo/bar");
-    TEST("/foo//bar", "/foo/bar");
-    TEST("/foo/./bar", "/foo/bar");
-    TEST("/foo/../bar", "/bar");
-    TEST("/foo/../bar/", "/bar");
-    TEST("/foo/bar/..", "/foo");
-
-    dv_free(p);
-
-#undef TEST
-}
-#endif
-
-static void RelativePath(d_Vector(char)* out, int off, d_Slice(char) path)
-{
-    char *begin, *p, *end;
-
-#ifndef NDEBUG
-    static int test = 0;
-
-    if (test++ == 0) {
-        TestPath();
+    if (!pstr.size) {
+        return 0;
     }
 
-#endif
+    path = pstr.data;
+    n = pstr.size;
+    rooted = existing ? buf[0] == '/' : path[0] == '/';
 
-    /* Make sure it starts with a / */
-    if (out->size > off && out->data[off] != '/') {
-        dv_insert(out, off, C("/"));
-    }
+	/* Invariants:
+	 *	reading from path; r is index of next byte to process.
+	 *	writing to buf; w is index of next byte to write.
+	 *	dotdot is index in p where .. must stop, either because
+	 *		it is the leading slash or it is a leading ../../.. prefix.
+     */
+    r = 0;
+    w = existing;
+    dotdot = 0;
+	if (rooted) {
+        if (w == 0) {
+            w++;
+        }
+        r++;
+        dotdot++;
+	}
 
-    /* Make sure it has a / separator */
-    if (!dv_begins_with(path, C("/"))) {
-        dv_append(out, C("/"));
-    }
-
-    dv_append(out, path);
-
-    begin = out->data + off;
-    p = begin + 1;
-    end = out->data + out->size;
-
-    while (p < end) {
-
-        /* p is set to the beginning of the current component (eg with /foo it
-         * points to f)
-         */
-
-        /* Remove repeating slashes // */
-        if (p[0] == '/') {
-            dv_erase(out, p - out->data, 1);
-            end -= 1;
-
-
-            /* Remove unnecessary /./ path components. Since p points to the dot
-             * this removes the dot and the preceding slash.
-             */
-        } else if (p[0] == '.' && (p + 1 == end || p[1] == '/')) {
-            dv_erase(out, p - 1 - out->data, 2);
-            end -= 2;
-
-
-            /* Remove unnecessary /foo/../ path components. Calculate prev which
-             * points to the beginning of the preceding component. If there is no
-             * preceding component e.g. with /../foo then prev will point to the
-             * beginning of the same component.  We then remove from the
-             * proceeding component to the end of the current component and the
-             * proceeding slash.
-             */
-        } else if (p[0] == '.' && p[1] == '.' && (p + 2 == end || p[2] == '/')) {
-
-            char* prev = p;
-
-            if (prev - 1 > begin) {
-                prev--;
-
-                while (prev[-1] != '/') {
-                    prev--;
+    while (r < n) {
+        if (path[r] == '/') {
+            /* empty path element */
+            r++;
+        } else if (path[r] == '.' && (r+1 == n || path[r+1] == '/')) {
+            /* . element */
+            r++;
+        } else if (path[r] == '.' && path[r+1] == '.' && (r+2 == n || path[r+2] == '/')) {
+            /* .. element: remove to last / */
+            r += 2;
+            if (w > dotdot) {
+                /* can backtrack */
+                w--;
+                while (w > dotdot && buf[w] != '/') {
+                    w--;
                 }
+            } else if (!rooted) {
+                /* cannot backtrack, but not rooted, so append .. element */
+                if (w > 0) {
+                    buf[w++] = '/';
+                }
+                buf[w++] = '.';
+                buf[w++] = '.';
+                dotdot = w;
             }
-
-            dv_erase(out, prev - 1 - out->data, p - prev + 3);
-            end -= p - prev + 3;
-            p = prev;
-
-
-            /* Find the end of the current component. */
         } else {
-            p = memchr(p, '/', end - p);
-
-            if (p) {
-                p++;
-            } else {
-                break;
-            }
+			/* real path element.
+			 * add slash if needed
+             */
+			if ((rooted && w != 1) || (!rooted && w != 0)) {
+                buf[w++] = '/';
+			}
+			/* copy element */
+            for (; r < n && path[r] != '/'; r++) {
+                buf[w++] = path[r];
+			}
         }
     }
 
-    /* After removing /. and /../foo components we may end up with an empty
-     * string.
-     */
-    if (out->size == off) {
-        dv_append(out, C("/"));
+    return w;
+}
+
+void dv_join_path(d_Vector(char)* v, int off, d_Slice(char) rel)
+{
+    int ret;
+
+    if (!rel.size) {
+        return;
     }
 
-    /* Remove trailing slashes */
-    if (out->size - off > 1 && end[-1] == '/') {
-        dv_erase_end(out, 1);
+    /* Remove the existing path if rel is absolute */
+    if (rel.size && rel.data[0] == '/') {
+        dv_resize(v, off);
+    }
+
+    /* Append a path seperator */
+    if (v->size > off) {
+        dv_append1(v, '/');
+    }
+
+    ret = clean_path(v->data + off, v->size - off, rel);
+    dv_resize(v, off + ret);
+
+    if (ret == 0) {
+        dv_append(v, C("."));
     }
 }
 
-void dv_relative_path(d_Vector(char)* path, d_Slice(char) relative)
-{ RelativePath(path, 0, relative); }
-
-void dv_append_normalised_path(d_Vector(char)* out, d_Slice(char) path)
-{ RelativePath(out, out->size, path); }
+void dv_clean_path(d_Vector(char)* v, d_Slice(char) path)
+{ dv_join_path(v, v->size, path); }
 
