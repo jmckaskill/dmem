@@ -25,7 +25,7 @@
  * ----------------------------------------------------------------------------
  */
 
-/* To get off64_t */
+/* To get off64_t and d_type */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
@@ -44,183 +44,192 @@
 #include <fcntl.h>
 #endif
 
-/* -------------------------------------------------------------------------- */
-
-#ifdef _WIN32
-int dv_append_file(d_Vector(char)* out, d_Slice(char) filename)
-{ return dv_append_file_win32(out, W(""), filename); }
-
-#else
-int dv_append_file(d_Vector(char)* out, d_Slice(char) filename)
-{ return dv_append_file_posix(out, C(""), filename); }
-
+#if _XOPEN_SOURCE >= 700 || _POSIX_C_SOURCE >= 200809L
+#define HAVE_OPENAT
 #endif
 
 /* -------------------------------------------------------------------------- */
 
-#ifdef _WIN32
-
-#ifdef _WIN32_WCE
-#define ROOT W("\\")
-#else
-#define ROOT W("\\\\?\\")
-#endif
-
-int dv_append_file_win32(d_Vector(char)* out, d_Slice(wchar) folder, d_Slice(char) relative)
+int dv_read(d_Vector(char)* v, int fd)
 {
-    d_Vector(wchar) wfilename = DV_INIT;
-    DWORD read;
-    DWORD dwsize[2];
-    uint64_t size;
-    int toread;
-    HANDLE file;
-    char* buf;
-    bool is_absolute_path = dv_begins_with(relative, C("\\")) || (relative.size > 1 && relative.data[1] == ':');
+    int begin = v->size;
+    struct stat st;
 
-    if (is_absolute_path) {
-        /* absolute path */
-        dv_append(&wfilename, ROOT);
-
-    } else if (folder.size == 0) {
-        /* relative path from current working directory
-         * we fake the root as CE's relative directory
-         */
-#ifndef _WIN32_WCE
-        DWORD dirsz;
-        wchar_t* buf;
-        dirsz = GetCurrentDirectoryW(0, NULL);
-        buf = dv_append_buffer(&wfilename, dirsz);
-        GetCurrentDirectoryW(dirsz + 1, buf);
-        dv_resize(&wfilename, (int) wcslen(wfilename.data));
-        dv_append(&wfilename, W("\\"));
-#endif
-
-    } else {
-        /* relative path from supplied folder */
-        dv_append(&wfilename, folder);
-        dv_append(&wfilename, W("\\"));
-    }
-
-    if (!dv_begins_with(wfilename, ROOT)) {
-        dv_insert(&wfilename, 0, ROOT);
-    }
-
-    dv_append_from_utf8(&wfilename, relative);
-    file = CreateFileW(wfilename.data, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    dv_free(wfilename);
-
-    if (file == INVALID_HANDLE_VALUE) {
+    if (fstat(fd, &st)) {
         return -1;
     }
 
-    dwsize[0] = GetFileSize(file, &dwsize[1]);
-    size = ((uint64_t) dwsize[1] << 32) | (uint64_t) dwsize[0];
-    toread = size > INT_MAX ? INT_MAX : (int) size;
-    buf = dv_append_buffer(out, toread);
-    
-    if ((toread > 0 && buf == NULL) || !ReadFile(file, buf, (DWORD) toread, &read, NULL) || read != (DWORD) toread) {
-        CloseHandle(file);
-        dv_erase_end(out, toread);
+    if (st.st_size + begin > INT_MAX) {
+        st.st_size = INT_MAX - begin;
+    }
+
+    dv_reserve(v, begin + st.st_size);
+
+    for (;;) {
+        int r = read(fd, v->out + v->size, dv_reserved(v) - v->size);
+
+        if (r < 0 && errno == EINTR) {
+            r = 0;
+        } else if (r < 0) {
+            dv_resize(v, begin);
+            return -1;
+        } else if (r == 0) {
+            break;
+        }
+
+        dv_resize(v, v->size + r);
+    }
+
+    return v->size - begin;
+}
+
+/* -------------------------------------------------------------------------- */
+
+int dv_read_file(d_Vector(char)* v, d_Slice(char) path, dv_dir* dir)
+{
+    int begin = v->size;
+    int fd, ret;
+
+    /* Append the path to the vector to ensure its null terminated */
+
+#ifdef HAVE_OPENAT
+    if (dir && dir->fd >= 0) {
+        dv_append(v, path);
+        fd = openat(dir->fd, v->data + begin, O_RDONLY | O_CLOEXEC);
+    } else
+#endif
+    if (dir && dir->path.size) {
+        dv_clean_path(v, dir->path);
+        dv_join_path(v, begin, path);
+        fd = open(v->data + begin, flags);
+    } else {
+        dv_clean_path(v, path);
+        fd = open(v->data + begin, flags);
+    }
+
+    dv_resize(v, begin);
+
+    if (fd < 0) {
         return -1;
     }
 
-    CloseHandle(file);
-    return toread;
+    ret = dv_read(v, fd);
+    close(fd);
+    return ret;
 }
-#endif
 
 /* -------------------------------------------------------------------------- */
 
-#ifdef _POSIX_C_SOURCE
-int dv_append_file_posix(d_Vector(char)* out, d_Slice(char) folder, d_Slice(char) relative)
+int dv_open_dir(dv_dir* d, d_Slice(char) path)
 {
-    struct stat st;
-    d_Vector(char) filename = DV_INIT;
-    char* buf;
-    int toread = 0;
-    int fd;
+    DIR* dir;
+    int fd = -1;
+    d_Vector(char) v = DV_INIT;
 
-    if (folder.size == 0 || (relative.size && relative.data[0] == '/')) {
-        dv_set(&filename, relative);
+#ifdef HAVE_OPENAT
+    if (dir && dir->fd >= 0) {
+        dv_append(&v, path);
+        fd = openat(dir->fd, path.data, O_RDONLY | O_CLOEXEC | O_DIRECTORY);
+        dir = fdopendir(fd);
+    } else
+#endif
+    if (dir && dir->path.size) {
+        dv_clean_path(&v, dir->path);
+        dv_join_path(&v, 0, path);
+        dir = opendir(v.data);
     } else {
-        dv_set(&filename, folder);
-        dv_append(&filename, C("/"));
-        dv_append(&filename, relative);
+        dv_clean_path(&v, path);
+        dir = opendir(v.data);
     }
 
-    fd = open(filename.data, O_RDONLY);
-    dv_free(filename);
+    if (dir == NULL) {
+        close(fd);
+        dv_free(&v);
+        return -1;
+    }
+
+    d->u = dir;
+    d->path = v;
+    d->fd = fd;
 
     if (fd < 0) {
-        goto err;
-    }
-
-    if (fstat(fd, &st)) {
-        goto err;
-    }
-
-    toread = st.st_size > INT_MAX ? INT_MAX : (int) st.st_size;
-    buf = dv_append_buffer(out, toread);
-
-    if ((toread > 0 && buf == NULL) || read(fd, buf, toread) != toread) {
-        goto err;
-    }
-
-    close(fd);
-    return toread;
-
-err:
-    dv_erase_end(out, toread);
-    close(fd);
-    return -1;
-}
-#endif
-
-/* -------------------------------------------------------------------------- */
-
-#ifdef DMEM_HAVE_OPENAT
-int dv_append_file_openat(d_Vector(char)* out, int dfd, d_Slice(char) relative)
-{
-    struct stat st;
-    char* buf;
-    d_Vector(char) filecopy = DV_INIT;
-    int toread = 0;
-    int fd;
-
-    /* need to copy the filename to ensure its null terminated */
-    dv_set(&filecopy, relative);
-    if (dfd >= 0) {
-        fd = openat(dfd, filecopy.data, O_RDONLY);
+        d->path = v;
     } else {
-        fd = open(filecopy.data, O_RDONLY);
-    }
-    dv_free(filecopy);
-
-    if (fd < 0) {
-        goto err;
+        d->path.data = NULL;
+        d->path.size = 0;
+        dv_free(v);
     }
 
-    if (fstat(fd, &st)) {
-        goto err;
-    }
-
-    toread = st.st_size > INT_MAX ? INT_MAX : (int) st.st_size;
-    buf = dv_append_buffer(out, toread);
-
-    if ((toread > 0 && buf == NULL) || read(fd, buf, toread) != toread) {
-        goto err;
-    }
-
-    close(fd);
-    return toread;    
-
-err:
-    dv_erase_end(out, toread);
-    close(fd);
-    return -1;
+    return &d->h;
 }
-#endif
 
 /* -------------------------------------------------------------------------- */
+
+void dv_close_dir(dv_dir* d)
+{
+    if (d) {
+        closedir((DIR*) d->dir);
+        dv_free(d->path);
+        close(d->fd);
+        free(d);
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+
+bool dv_read_dir(dv_dir* d, d_Slice(char)* file, bool* isdir)
+{
+    DIR* dir = d->dir;
+    struct dirent* e;
+
+next_file:
+    e = readdir(d->dir);
+    if (e == NULL) {
+        return false;
+    }
+
+#ifdef _DIRENT_HAVE_D_NAMLEN
+    *file = C2(e->d_name, e->d_namlen);
+#else
+    *file = dv_char(e->d_name);
+#endif
+
+    if (dv_equals(*file, C(".")) || dv_equals(*file, C(".."))) {
+        goto next_file;
+    }
+
+    if (isdir == NULL) {
+        /* nothing to do */
+
+#ifdef _DIRENT_HAVE_D_TYPE
+    } else if (e->d_type != DT_UNKNOWN) {
+        *isdir = e->d_type == DT_DIR;
+#endif
+
+    } else {
+        struct stat st;
+        int fd;
+
+#ifdef HAVE_OPENAT
+        fd = openat(d->fd, e->d_name, O_RDONLY | O_CLOEXEC);
+#else
+        int pathsz = d->path.size;
+        dv_append1(&d->path, '/');
+        dv_append(&d->path, *file);
+        fd = open(d->path.data, O_RDONLY | O_CLOEXEC);
+        dv_resize(&d->path, pathsz);
+#endif
+
+        if (fstat(fd, &st)) {
+            close(fd);
+            goto next_file;
+        }
+
+        close(fd);
+        *isdir = S_ISDIR(st.st_mode);
+    }
+
+    return true;
+}
 
 
