@@ -27,6 +27,7 @@
 
 /* needed for NAN */
 #define _ISOC99_SOURCE
+#define _CRT_SECURE_NO_WARNINGS
 #define DMEM_LIBRARY
 
 #include <dmem/char.h>
@@ -337,7 +338,7 @@ void dv_url_encode(d_vector(char)* to, d_string from)
 static const char lookup_hex[] = "0123456789abcdef";
 #define hex(p, v) ((p)[0] = lookup_hex[((v) & 0xFF) >> 4], (p)[1] = lookup_hex[v & 0x0F], (p) + 2)
 
-#if __LITTLE_ENDIAN__ || __ARMEL__ || defined __i386__ || defined __amd64__ || defined _M_X86 || defined _M_X64
+#if __LITTLE_ENDIAN__ || __ARMEL__ || defined __i386__ || defined __amd64__ || defined _M_IX86 || defined _M_X64
 #define u32(p, h, mh, ml, l) (*((uint32_t*) p) = ((uint32_t) (h)) | ((uint32_t) (mh) << 8) | ((uint32_t) (ml) << 16) | ((uint32_t) (l) << 24), (p) + 4)
 #elif __BIG_ENDIAN__ || __ARMEB__
 #define u32(p, h, mh, ml, l) (*((uint32_t*) p) = ((uint32_t) (h) << 24) | ((uint32_t) (mh) << 16) | ((uint32_t) (ml) << 8) | ((uint32_t) (l)), (p) + 4)

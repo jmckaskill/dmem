@@ -2,3 +2,6 @@
 *.so
 .AppleDouble
 *.xcodeproj
+*.vcproj
+/Debug
+/Release

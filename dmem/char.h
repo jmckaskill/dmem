@@ -42,7 +42,9 @@ DVECTOR_INIT(kv_pair, d_kv_pair);
 
 DMEM_INLINE void dkv_append(d_vector(kv_pair)* v, d_string key, d_string val)
 {
-    d_kv_pair kv = {key, val};
+    d_kv_pair kv;
+    kv.key = key;
+    kv.val = val;
     dv_append1(v, kv);
 }
 
