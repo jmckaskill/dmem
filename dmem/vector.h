@@ -62,36 +62,9 @@ DMEM_API void* dv_memrmem(const void* hay, size_t haylen, const void* needle, si
 
 /* ------------------------------------------------------------------------- */
 
-/* Declares a new vector d_Vector(name) and slice d_Slice(name) that holds
+/* Declares a new vector d_vector(name) and slice d_slice(name) that holds
  * 'type' data values
  */
-#ifdef __cplusplus
-
-#define DVECTOR_INIT(name, type)                                            \
-                                                                            \
-    struct d_slice_##name {                                                 \
-        int size;                                                           \
-        type const* data;                                                   \
-                                                                            \
-        bool operator == (d_slice_##name r) const {                         \
-            return size == r.size && 0 == memcmp(data, r.data, size * sizeof(type));\
-        }                                                                   \
-    };                                                                      \
-                                                                            \
-    struct d_vector_##name {                                                \
-        int size;                                                           \
-        type* data;                                                         \
-                                                                            \
-        operator d_slice_##name () const {                                  \
-            d_slice_##name ret;                                             \
-            ret.data = data;                                                \
-            ret.size = size;                                                \
-            return ret;                                                     \
-        }                                                                   \
-    }
-
-#else
-
 #define DVECTOR_INIT(name, type)                                            \
     typedef struct d_vector_##name d_vector_##name;                         \
     typedef struct d_vector_##name d_slice_##name;                          \
@@ -101,16 +74,32 @@ DMEM_API void* dv_memrmem(const void* hay, size_t haylen, const void* needle, si
         type* data;                                                         \
     }
 
-#endif
-
-/* Static initializer for vectors 'd_Vector(name) foo = DV_INIT;' */
+/* Static initializer for vectors 'd_vector(name) foo = DV_INIT;' */
 #define DV_INIT {0,NULL}
-#define d_Vector(name) d_vector_##name
-#define d_Slice(name) d_slice_##name
+#define d_vector(name) d_vector_##name
+#define d_slice(name) d_slice_##name
 
 /* Declare some basic vectors for the built in types */
-DVECTOR_INIT(char, char);
 DVECTOR_INIT(int, int);
+
+#ifdef __cplusplus
+struct d_string {
+    int size;
+    const char* data;
+};
+struct d_vector_char {
+    int size;
+    char* data;
+    operator d_string() const {
+        d_string ret = {size, data};
+        return ret;
+    }
+};
+typedef d_vector_char d_slice_char;
+#else
+DVECTOR_INIT(char, char);
+typedef d_slice(char) d_string;
+#endif
 
 /* ------------------------------------------------------------------------- */
 
@@ -127,10 +116,10 @@ T* dv_cast(T* p, void* u)
 
 DMEM_API void* dv_resize_base(void* p, int newsz);
 DMEM_API void dv_free_base(void* p);
-DMEM_API void* dv_append_buffer_base(d_Vector(char)* v, int num, int typesz);
-DMEM_API void* dv_append_zeroed_base(d_Vector(char)* v, int num, int typesz);
-DMEM_API void* dv_insert_buffer_base(d_Vector(char)* v, int idx, int num, int typesz);
-DMEM_API void* dv_insert_zeroed_base(d_Vector(char)* v, int idx, int num, int typesz);
+DMEM_API void* dv_append_buffer_base(d_vector(char)* v, int num, int typesz);
+DMEM_API void* dv_append_zeroed_base(d_vector(char)* v, int num, int typesz);
+DMEM_API void* dv_insert_buffer_base(d_vector(char)* v, int idx, int num, int typesz);
+DMEM_API void* dv_insert_zeroed_base(d_vector(char)* v, int idx, int num, int typesz);
 
 /* ------------------------------------------------------------------------- */
 
@@ -157,15 +146,15 @@ DMEM_API void* dv_insert_zeroed_base(d_Vector(char)* v, int idx, int num, int ty
  * the added space - IDX and NUM are evaluated only once before the resize
  * occurs. The _zeroed form also zeros the added buffer.
  */
-#define dv_insert_buffer(PVEC, IDX, NUM) dv_cast((PVEC)->data, dv_insert_buffer_base((d_Vector(char)*) (PVEC), IDX, NUM, dv_pdatasize(PVEC)))
-#define dv_insert_zeroed(PVEC, IDX, NUM) dv_cast((PVEC)->data, dv_insert_zeroed_base((d_Vector(char)*) (PVEC), IDX, NUM, dv_pdatasize(PVEC)))
+#define dv_insert_buffer(PVEC, IDX, NUM) dv_cast((PVEC)->data, dv_insert_buffer_base((d_vector(char)*) (PVEC), IDX, NUM, dv_pdatasize(PVEC)))
+#define dv_insert_zeroed(PVEC, IDX, NUM) dv_cast((PVEC)->data, dv_insert_zeroed_base((d_vector(char)*) (PVEC), IDX, NUM, dv_pdatasize(PVEC)))
 
 /* Adds space for NUM values at the end of the vector and returns a pointer to
  * the beginning of the added space - NUM is only evaluated once before the
  * append occurs. The _zeroed form also zeros the added buffer.
  */
-#define dv_append_buffer(PVEC, NUM) dv_cast((PVEC)->data, dv_append_buffer_base((d_Vector(char)*) (PVEC), NUM, dv_pdatasize(PVEC)))
-#define dv_append_zeroed(PVEC, NUM) dv_cast((PVEC)->data, dv_append_zeroed_base((d_Vector(char)*) (PVEC), NUM, dv_pdatasize(PVEC)))
+#define dv_append_buffer(PVEC, NUM) dv_cast((PVEC)->data, dv_append_buffer_base((d_vector(char)*) (PVEC), NUM, dv_pdatasize(PVEC)))
+#define dv_append_zeroed(PVEC, NUM) dv_cast((PVEC)->data, dv_append_zeroed_base((d_vector(char)*) (PVEC), NUM, dv_pdatasize(PVEC)))
 
 /* ------------------------------------------------------------------------- */
 

@@ -73,7 +73,7 @@ void* dv_resize_base(void* p, int newsz)
 
 /* ------------------------------------------------------------------------- */
 
-void* dv_append_buffer_base(d_Vector(char)* v, int num, int typesz)
+void* dv_append_buffer_base(d_vector(char)* v, int num, int typesz)
 {
     int oldsz = v->size * typesz;
     v->size += num;
@@ -81,7 +81,7 @@ void* dv_append_buffer_base(d_Vector(char)* v, int num, int typesz)
     return v->data + oldsz;
 }
 
-void* dv_append_zeroed_base(d_Vector(char)* v, int num, int typesz)
+void* dv_append_zeroed_base(d_vector(char)* v, int num, int typesz)
 {
     void* ret = dv_append_buffer_base(v, num, typesz);
     memset(ret, 0, num * typesz);
@@ -90,7 +90,7 @@ void* dv_append_zeroed_base(d_Vector(char)* v, int num, int typesz)
 
 /* ------------------------------------------------------------------------- */
 
-void* dv_insert_buffer_base(d_Vector(char)* v, int idx, int num, int typesz)
+void* dv_insert_buffer_base(d_vector(char)* v, int idx, int num, int typesz)
 {
     char* s;
     char* e;
@@ -103,7 +103,7 @@ void* dv_insert_buffer_base(d_Vector(char)* v, int idx, int num, int typesz)
     return s;
 }
 
-void* dv_insert_zeroed_base(d_Vector(char)* v, int idx, int num, int typesz)
+void* dv_insert_zeroed_base(d_vector(char)* v, int idx, int num, int typesz)
 {
     void* ret = dv_insert_buffer_base(v, idx, num, typesz);
     memset(ret, 0, num * typesz);

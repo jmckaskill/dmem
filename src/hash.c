@@ -34,7 +34,8 @@
 #include <alloca.h>
 #endif
 
-typedef khint_t dh_Iter;
+typedef uint32_t khint_t;
+typedef khint_t dm_Iter;
 
 #define __ac_HASH_PRIME_SIZE 32
 static const uint32_t __ac_prime_list[__ac_HASH_PRIME_SIZE] = {
@@ -65,40 +66,41 @@ static const double __ac_HASH_UPPER = 0.77;
 
 #define val_ptr(vals, valsz, i) ((char*) (vals) + (i * valsz))
 
-typedef struct dhi_impl_t dhi_impl_t;
+typedef struct dhi32_impl_t dhi32_impl_t;
+typedef struct dhi64_impl_t dhi64_impl_t;
 typedef struct dhs_impl_t dhs_impl_t;
 
-struct dhi_impl_t {
-    dh_base base;
-    intmax_t* keys;
+struct dhi32_impl_t {
+    d_map base;
+    int32_t* keys;
+    void* vals;
+};
+
+struct dhi64_impl_t {
+    d_map base;
+    int64_t* keys;
     void* vals;
 };
 
 struct dhs_impl_t {
-    dh_base base;
-    d_Slice(char)* keys;
+    d_map base;
+    d_string* keys;
     void* vals;
 };
 
 /* ------------------------------------------------------------------------- */
 
-#if INTMAX_MAX == INT32_MAX + 0
-static uint32_t hash_int(intmax_t key)
-{ 
-  return (uint32_t) key; 
+static uint32_t hash_int32(int32_t key)
+{
+  return (uint32_t) key;
 }
-#elif INTMAX_MAX == INT64_MAX + 0
-static uint32_t hash_int(intmax_t key)
+
+static uint32_t hash_int64(int64_t key)
 {
   return (uint32_t) ((key >> 33) ^ key ^ (key << 11));
 }
-#else
-#error
-#endif
 
-/* ------------------------------------------------------------------------- */
-
-static uint32_t hash_string(d_Slice(char) key)
+static uint32_t hash_string(d_string key)
 {
 
     int i;
@@ -119,18 +121,22 @@ static uint32_t hash_string(d_Slice(char) key)
 
 /* ------------------------------------------------------------------------- */
 
-void dh_free_base(dh_base* h, void* keys, void* vals)
+void dm_free_base(d_map* h)
 {
-    if (h) {
-        free(h->flags);
-        free(keys);
-        free(vals);
+    /* Doesn't matter which implementation we use as they all have the same
+     * layout */
+    dhi32_impl_t* hi = (dhi32_impl_t*) h;
+
+    if (hi) {
+        free(hi->base.flags);
+        free(hi->keys);
+        free(hi->vals);
     }
 }
 
 /* ------------------------------------------------------------------------- */
 
-void dh_clear_base(dh_base* h)
+void dm_clear_base(d_map* h)
 {
     if (h && h->flags) {
         memset(h->flags, 0xaa, ((h->n_buckets>>4) + 1) * sizeof(uint32_t));
@@ -140,12 +146,12 @@ void dh_clear_base(dh_base* h)
 
 /* ------------------------------------------------------------------------- */
 
-bool dhi_get_base(const dh_base* h, intmax_t key)
+bool dm_i32_get_base(const d_map* h, int32_t key)
 {
-    dhi_impl_t* hi = (dhi_impl_t*) h;
+    dhi32_impl_t* hi = (dhi32_impl_t*) h;
     if (h->n_buckets) {
         khint_t inc, k, i, last;
-        k = hash_int(key); i = k % h->n_buckets;
+        k = hash_int32(key); i = k % h->n_buckets;
         inc = 1 + k % (h->n_buckets - 1); last = i;
         while (!__ac_isempty(h->flags, i) && (__ac_isdel(h->flags, i) || hi->keys[i] != key)) {
             if (i + inc >= h->n_buckets) i = i + inc - h->n_buckets;
@@ -164,8 +170,31 @@ bool dhi_get_base(const dh_base* h, intmax_t key)
     }
 }
 
+bool dm_i64_get_base(const d_map* h, int64_t key)
+{
+    dhi64_impl_t* hi = (dhi64_impl_t*) h;
+    if (h->n_buckets) {
+        khint_t inc, k, i, last;
+        k = hash_int64(key); i = k % h->n_buckets;
+        inc = 1 + k % (h->n_buckets - 1); last = i;
+        while (!__ac_isempty(h->flags, i) && (__ac_isdel(h->flags, i) || hi->keys[i] != key)) {
+            if (i + inc >= h->n_buckets) i = i + inc - h->n_buckets;
+            else i += inc;
+            if (i == last) return false;
+        }
 
-bool dhs_get_base(const dh_base* h, d_Slice(char) key)
+        if (__ac_iseither(h->flags, i)) {
+            return false;
+        }
+
+        hi->base.idx = i;
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool dm_sget_base(const d_map* h, d_string key)
 {
     dhs_impl_t* hi = (dhs_impl_t*) h;
     if (h->n_buckets) {
@@ -191,9 +220,9 @@ bool dhs_get_base(const dh_base* h, d_Slice(char) key)
 
 /* ------------------------------------------------------------------------- */
 
-static void resize_int(dh_base *h, khint_t new_n_buckets, size_t valsz)
+static void resize_i32(d_map *h, khint_t new_n_buckets, size_t valsz)
 {
-    dhi_impl_t* hi = (dhi_impl_t*) h;
+    dhi32_impl_t* hi = (dhi32_impl_t*) h;
     uint32_t *new_flags = 0;
     khint_t j = 1;
     {
@@ -205,7 +234,7 @@ static void resize_int(dh_base *h, khint_t new_n_buckets, size_t valsz)
             new_flags = (uint32_t*)malloc(((new_n_buckets>>4) + 1) * sizeof(uint32_t));
             memset(new_flags, 0xaa, ((new_n_buckets>>4) + 1) * sizeof(uint32_t));
             if (h->n_buckets < new_n_buckets) {
-                hi->keys = (intmax_t*)realloc(hi->keys, new_n_buckets * sizeof(intmax_t));
+                hi->keys = (int32_t*)realloc(hi->keys, new_n_buckets * sizeof(int32_t));
                 hi->vals = realloc(hi->vals, new_n_buckets * valsz);
             }
         }
@@ -215,12 +244,12 @@ static void resize_int(dh_base *h, khint_t new_n_buckets, size_t valsz)
         char* valtmp = (char*) alloca(valsz);
         for (j = 0; j != h->n_buckets; ++j) {
             if (__ac_iseither(h->flags, j) == 0) {
-                intmax_t key = ((intmax_t*) hi->keys)[j];
+                int32_t key = ((int32_t*) hi->keys)[j];
                 memcpy(val, val_ptr(hi->vals, valsz, j), valsz);
                 __ac_set_isdel_true(h->flags, j);
                 while (1) {
                     khint_t inc, k, i;
-                    k = hash_int(key);
+                    k = hash_int32(key);
                     i = k % new_n_buckets;
                     inc = 1 + k % (new_n_buckets - 1);
                     while (!__ac_isempty(new_flags, i)) {
@@ -229,7 +258,7 @@ static void resize_int(dh_base *h, khint_t new_n_buckets, size_t valsz)
                     }
                     __ac_set_isempty_false(new_flags, i);
                     if (i < h->n_buckets && __ac_iseither(h->flags, i) == 0) {
-                        intmax_t tmp = hi->keys[i];
+                        int32_t tmp = hi->keys[i];
                         hi->keys[i] = key;
                         key = tmp;
                         {
@@ -250,7 +279,7 @@ static void resize_int(dh_base *h, khint_t new_n_buckets, size_t valsz)
             }
         }
         if (h->n_buckets > new_n_buckets) {
-            hi->keys = (intmax_t*)realloc(hi->keys, new_n_buckets * sizeof(intmax_t));
+            hi->keys = (int32_t*)realloc(hi->keys, new_n_buckets * sizeof(int32_t));
             hi->vals = realloc(hi->vals, new_n_buckets * valsz);
         }
         free(h->flags);
@@ -261,7 +290,77 @@ static void resize_int(dh_base *h, khint_t new_n_buckets, size_t valsz)
     }
 }
 
-static void resize_string(dh_base *h, khint_t new_n_buckets, size_t valsz)
+static void resize_i64(d_map *h, khint_t new_n_buckets, size_t valsz)
+{
+    dhi64_impl_t* hi = (dhi64_impl_t*) h;
+    uint32_t *new_flags = 0;
+    khint_t j = 1;
+    {
+        khint_t t = __ac_HASH_PRIME_SIZE - 1;
+        while (__ac_prime_list[t] > new_n_buckets) --t;
+        new_n_buckets = __ac_prime_list[t+1];
+        if (h->size >= (khint_t)(new_n_buckets * __ac_HASH_UPPER + 0.5)) j = 0;
+        else {
+            new_flags = (uint32_t*)malloc(((new_n_buckets>>4) + 1) * sizeof(uint32_t));
+            memset(new_flags, 0xaa, ((new_n_buckets>>4) + 1) * sizeof(uint32_t));
+            if (h->n_buckets < new_n_buckets) {
+                hi->keys = (int64_t*)realloc(hi->keys, new_n_buckets * sizeof(int64_t));
+                hi->vals = realloc(hi->vals, new_n_buckets * valsz);
+            }
+        }
+    }
+    if (j) {
+        char* val = (char*) alloca(valsz);
+        char* valtmp = (char*) alloca(valsz);
+        for (j = 0; j != h->n_buckets; ++j) {
+            if (__ac_iseither(h->flags, j) == 0) {
+                int64_t key = ((int64_t*) hi->keys)[j];
+                memcpy(val, val_ptr(hi->vals, valsz, j), valsz);
+                __ac_set_isdel_true(h->flags, j);
+                while (1) {
+                    khint_t inc, k, i;
+                    k = hash_int64(key);
+                    i = k % new_n_buckets;
+                    inc = 1 + k % (new_n_buckets - 1);
+                    while (!__ac_isempty(new_flags, i)) {
+                        if (i + inc >= new_n_buckets) i = i + inc - new_n_buckets;
+                        else i += inc;
+                    }
+                    __ac_set_isempty_false(new_flags, i);
+                    if (i < h->n_buckets && __ac_iseither(h->flags, i) == 0) {
+                        int64_t tmp = hi->keys[i];
+                        hi->keys[i] = key;
+                        key = tmp;
+                        {
+                            char* tmp;
+                            memcpy(valtmp, val_ptr(hi->vals, valsz, i), valsz);
+                            memcpy(val_ptr(hi->vals, valsz, i), val, valsz);
+                            tmp = valtmp;
+                            valtmp = val;
+                            val = tmp;
+                        }
+                        __ac_set_isdel_true(h->flags, i);
+                    } else {
+                        hi->keys[i] = key;
+                        memcpy(val_ptr(hi->vals, valsz, i), val, valsz);
+                        break;
+                    }
+                }
+            }
+        }
+        if (h->n_buckets > new_n_buckets) {
+            hi->keys = (int64_t*)realloc(hi->keys, new_n_buckets * sizeof(int64_t));
+            hi->vals = realloc(hi->vals, new_n_buckets * valsz);
+        }
+        free(h->flags);
+        h->flags = new_flags;
+        h->n_buckets = new_n_buckets;
+        h->n_occupied = h->size;
+        h->upper_bound = (khint_t)(h->n_buckets * __ac_HASH_UPPER + 0.5);
+    }
+}
+
+static void resize_string(d_map *h, khint_t new_n_buckets, size_t valsz)
 {
     dhs_impl_t* hi = (dhs_impl_t*) h;
     uint32_t *new_flags = 0;
@@ -275,7 +374,7 @@ static void resize_string(dh_base *h, khint_t new_n_buckets, size_t valsz)
             new_flags = (uint32_t*)malloc(((new_n_buckets>>4) + 1) * sizeof(uint32_t));
             memset(new_flags, 0xaa, ((new_n_buckets>>4) + 1) * sizeof(uint32_t));
             if (h->n_buckets < new_n_buckets) {
-                hi->keys = (d_Slice(char)*)realloc(hi->keys, new_n_buckets * sizeof(d_Slice(char)));
+                hi->keys = (d_string*)realloc(hi->keys, new_n_buckets * sizeof(d_string));
                 hi->vals = realloc(hi->vals, new_n_buckets * valsz);
             }
         }
@@ -285,7 +384,7 @@ static void resize_string(dh_base *h, khint_t new_n_buckets, size_t valsz)
         char* valtmp = (char*) alloca(valsz);
         for (j = 0; j != h->n_buckets; ++j) {
             if (__ac_iseither(h->flags, j) == 0) {
-                d_Slice(char) key = hi->keys[j];
+                d_string key = hi->keys[j];
                 memcpy(val, val_ptr(hi->vals, valsz, j), valsz);
                 __ac_set_isdel_true(h->flags, j);
                 while (1) {
@@ -299,7 +398,7 @@ static void resize_string(dh_base *h, khint_t new_n_buckets, size_t valsz)
                     }
                     __ac_set_isempty_false(new_flags, i);
                     if (i < h->n_buckets && __ac_iseither(h->flags, i) == 0) {
-                        d_Slice(char) tmp = hi->keys[i];
+                        d_string tmp = hi->keys[i];
                         hi->keys[i] = key;
                         key = tmp;
                         {
@@ -320,7 +419,7 @@ static void resize_string(dh_base *h, khint_t new_n_buckets, size_t valsz)
             }
         }
         if (h->n_buckets > new_n_buckets) {
-            hi->keys = (d_Slice(char)*)realloc(hi->keys, new_n_buckets * sizeof(d_Slice(char)));
+            hi->keys = (d_string*)realloc(hi->keys, new_n_buckets * sizeof(d_string));
             hi->vals = realloc(hi->vals, new_n_buckets * valsz);
         }
         free(h->flags);
@@ -333,17 +432,17 @@ static void resize_string(dh_base *h, khint_t new_n_buckets, size_t valsz)
 
 /* ------------------------------------------------------------------------- */
 
-bool dhi_add_base(dh_base* h, intmax_t key, size_t valsz)
+bool dm_i32_add_base(d_map* h, int32_t key, size_t valsz)
 {
-    dhi_impl_t* hi = (dhi_impl_t*) h;
+    dhi32_impl_t* hi = (dhi32_impl_t*) h;
     khint_t x;
     if (h->n_occupied >= h->upper_bound) {
-        if (h->n_buckets > (h->size<<1)) resize_int(h, h->n_buckets - 1, valsz);
-        else resize_int(h, h->n_buckets + 1, valsz);
+        if (h->n_buckets > (h->size<<1)) resize_i32(h, h->n_buckets - 1, valsz);
+        else resize_i32(h, h->n_buckets + 1, valsz);
     }
     {
         khint_t inc, k, i, site, last;
-        x = site = h->n_buckets; k = hash_int(key); i = k % h->n_buckets;
+        x = site = h->n_buckets; k = hash_int32(key); i = k % h->n_buckets;
         if (__ac_isempty(h->flags, i)) x = i;
         else {
             inc = 1 + k % (h->n_buckets - 1); last = i;
@@ -379,7 +478,53 @@ bool dhi_add_base(dh_base* h, intmax_t key, size_t valsz)
     }
 }
 
-bool dhs_add_base(dh_base* h, d_Slice(char) key, size_t valsz)
+bool dm_i64_add_base(d_map* h, int64_t key, size_t valsz)
+{
+    dhi64_impl_t* hi = (dhi64_impl_t*) h;
+    khint_t x;
+    if (h->n_occupied >= h->upper_bound) {
+        if (h->n_buckets > (h->size<<1)) resize_i64(h, h->n_buckets - 1, valsz);
+        else resize_i64(h, h->n_buckets + 1, valsz);
+    }
+    {
+        khint_t inc, k, i, site, last;
+        x = site = h->n_buckets; k = hash_int64(key); i = k % h->n_buckets;
+        if (__ac_isempty(h->flags, i)) x = i;
+        else {
+            inc = 1 + k % (h->n_buckets - 1); last = i;
+            while (!__ac_isempty(h->flags, i) && (__ac_isdel(h->flags, i) || hi->keys[i] != key)) {
+                if (__ac_isdel(h->flags, i)) site = i;
+                if (i + inc >= h->n_buckets) i = i + inc - h->n_buckets;
+                else i += inc;
+                if (i == last) { x = site; break; }
+            }
+            if (x == h->n_buckets) {
+                if (__ac_isempty(h->flags, i) && site != h->n_buckets) x = site;
+                else x = i;
+            }
+        }
+    }
+
+    h->idx = x;
+
+    if (__ac_isempty(h->flags, x)) {
+        hi->keys[x] = key;
+        __ac_set_isboth_false(h->flags, x);
+        ++h->size; ++h->n_occupied;
+        return true;
+
+    } else if (__ac_isdel(h->flags, x)) {
+        hi->keys[x] = key;
+        __ac_set_isboth_false(h->flags, x);
+        ++h->size;
+        return true;
+
+    } else {
+        return false;
+    }
+}
+
+bool dm_sadd_base(d_map* h, d_string key, size_t valsz)
 {
     dhs_impl_t* hi = (dhs_impl_t*) h;
     khint_t x;
@@ -427,7 +572,7 @@ bool dhs_add_base(dh_base* h, d_Slice(char) key, size_t valsz)
 
 /* ------------------------------------------------------------------------- */
 
-void dh_erase_base(dh_base* h, size_t x)
+void dm_erase_base(d_map* h, size_t x)
 {
     if (!__ac_iseither(h->flags, x)) {
         __ac_set_isdel_true(h->flags, x);
@@ -437,7 +582,7 @@ void dh_erase_base(dh_base* h, size_t x)
 
 /* ------------------------------------------------------------------------- */
 
-bool dh_hasnext_base(const dh_base* h, int* pidx)
+bool dm_hasnext_base(const d_map* h, int* pidx)
 {
     while (++(*pidx) < (int) h->n_buckets) {
         if (!__ac_iseither(h->flags, *pidx)) {

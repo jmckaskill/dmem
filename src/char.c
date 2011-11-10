@@ -69,7 +69,7 @@
 
 /* ------------------------------------------------------------------------- */
 
-int dv_vprint(d_Vector(char)* v, const char* format, va_list ap)
+int dv_vprint(d_vector(char)* v, const char* format, va_list ap)
 {
     dv_reserve(v, v->size + 1);
 
@@ -118,7 +118,7 @@ int dv_vprint(d_Vector(char)* v, const char* format, va_list ap)
     }
 }
 
-int dv_print(d_Vector(char)* v, const char* format, ...)
+int dv_print(d_vector(char)* v, const char* format, ...)
 {
     va_list ap;
     va_start(ap, format);
@@ -150,7 +150,7 @@ static void ToBase64(uint8_t src[3], char dest[4])
     dest[3] = g_base64[(int) dest[3]];
 }
 
-void dv_base64_encode(d_Vector(char)* v, d_Slice(char) from)
+void dv_base64_encode(d_vector(char)* v, d_string from)
 {
     uint8_t* up = (uint8_t*) from.data;
     uint8_t* uend = up + from.size;
@@ -187,7 +187,7 @@ void dv_base64_encode(d_Vector(char)* v, d_Slice(char) from)
 
 /* -------------------------------------------------------------------------- */
 
-void dv_hex_decoded(d_Vector(char)* to, d_Slice(char) from)
+void dv_hex_decoded(d_vector(char)* to, d_string from)
 {
     int i;
     uint8_t* ufrom = (uint8_t*) from.data;
@@ -233,7 +233,7 @@ err:
 
 /* -------------------------------------------------------------------------- */
 
-void dv_hex_encode(d_Vector(char)* to, d_Slice(char) from)
+void dv_hex_encode(d_vector(char)* to, d_string from)
 {
     int i;
     uint8_t* ufrom = (uint8_t*) from.data;
@@ -262,7 +262,7 @@ void dv_hex_encode(d_Vector(char)* to, d_Slice(char) from)
 
 /* -------------------------------------------------------------------------- */
 
-void dv_url_decoded(d_Vector(char)* to, d_Slice(char) from)
+void dv_url_decoded(d_vector(char)* to, d_string from)
 {
     const char* b = from.data;
     const char* e = from.data + from.size;
@@ -270,7 +270,7 @@ void dv_url_decoded(d_Vector(char)* to, d_Slice(char) from)
 
     while (p < e) {
         if (*p == '%') {
-            dv_append2(to, b, p - b);
+            dv_append2(to, b, (int) (p - b));
 
             /* if we have an incomplete or invalid espace then just ignore it */
             if (p + 3 > e) {
@@ -283,7 +283,7 @@ void dv_url_decoded(d_Vector(char)* to, d_Slice(char) from)
             b = p;
 
         } else if (*p == '+') {
-            dv_append2(to, b, p - b);
+            dv_append2(to, b, (int) (p - b));
             dv_append(to, C(" "));
             p++;
             b = p;
@@ -293,12 +293,12 @@ void dv_url_decoded(d_Vector(char)* to, d_Slice(char) from)
         }
     }
 
-    dv_append2(to, b, p - b);
+    dv_append2(to, b, (int) (p - b));
 }
 
 /* -------------------------------------------------------------------------- */
 
-void dv_url_encode(d_Vector(char)* to, d_Slice(char) from)
+void dv_url_encode(d_vector(char)* to, d_string from)
 {
     const char* b = from.data;
     const char* e = b + from.size;
@@ -314,14 +314,14 @@ void dv_url_encode(d_Vector(char)* to, d_Slice(char) from)
              || *p == '.') {
             p++;
         } else {
-            dv_append2(to, b, p - b);
+            dv_append2(to, b, (int) (p - b));
             dv_print(to, "%%%02x", *(unsigned char*) p);
             p++;
             b = p;
         }
     }
 
-    dv_append2(to, b, p - b);
+    dv_append2(to, b, (int) (p - b));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -539,7 +539,7 @@ static char* do_line(char* p, int off, const char* d, int n, int* color)
     return set_normal(p, color);
 }
 
-void dv_hex_dump(d_Vector(char)* s, d_Slice(char) data, bool colors)
+void dv_hex_dump(d_vector(char)* s, d_string data, bool colors)
 {
     int i, color;
 
@@ -565,11 +565,11 @@ void dv_hex_dump(d_Vector(char)* s, d_Slice(char) data, bool colors)
         char* p = dv_reserve(s, BYTES_PER_LINE);
         char* e = do_line(p, i, &data.data[i], n, colors ? &color : NULL);
         assert(e - p <= BYTES_PER_LINE);
-        dv_resize(s, e - data.data);
+        dv_resize(s, (int) (e - data.data));
     }
 }
 
-void dv_log(d_Slice(char) data, const char* format, ...)
+void dv_log(d_string data, const char* format, ...)
 {
     /* use a uint32_t to ensure the buffer is 4 byte aligned */
     uint32_t buf[BYTES_PER_LINE/4];
@@ -601,7 +601,7 @@ void dv_log(d_Slice(char) data, const char* format, ...)
 
 /* ------------------------------------------------------------------------- */
 
-double dv_to_number(d_Slice(char) value)
+double dv_to_number(d_string value)
 {
     char* end;
     double ret;
@@ -621,7 +621,7 @@ double dv_to_number(d_Slice(char) value)
 
 /* ------------------------------------------------------------------------- */
 
-int dv_to_integer(d_Slice(char) value, int radix, int defvalue)
+int dv_to_integer(d_string value, int radix, int defvalue)
 {
     char buf[sizeof(int)*CHAR_BIT+2]; /* worst case is binary including the -ve */
     char* p = (char*) value.data;
@@ -632,7 +632,7 @@ int dv_to_integer(d_Slice(char) value, int radix, int defvalue)
         p++;
     }
 
-    copy = min(sizeof(buf)-1, e - p);
+    copy = min((int) sizeof(buf)-1, (int) (e - p));
     memcpy(buf, p, copy);
     buf[copy] = '\0';
 
@@ -647,7 +647,7 @@ int dv_to_integer(d_Slice(char) value, int radix, int defvalue)
 
 /* ------------------------------------------------------------------------- */
 
-bool dv_to_boolean(d_Slice(char) value)
+bool dv_to_boolean(d_string value)
 {
     if (dv_equals(value, C("TRUE"))) {
         return true;
@@ -662,7 +662,7 @@ bool dv_to_boolean(d_Slice(char) value)
 
 /* ------------------------------------------------------------------------- */
 
-d_Slice(char) dv_strip_whitespace(d_Slice(char) s)
+d_string dv_strip_whitespace(d_string s)
 {
     char* p = (char*) s.data + s.size;
 
@@ -670,7 +670,7 @@ d_Slice(char) dv_strip_whitespace(d_Slice(char) s)
         p--;
     }
 
-    s.size = p - s.data;
+    s.size = (int) (p - s.data);
     p = s.data;
     while (p < s.data + s.size && dv_isspace(p[0])) {
         p++;
@@ -683,14 +683,14 @@ d_Slice(char) dv_strip_whitespace(d_Slice(char) s)
 
 /* ------------------------------------------------------------------------- */
 
-d_Slice(char) dv_split(d_Slice(char)* from, int sep)
+d_string dv_split(d_string* from, int sep)
 {
-    d_Slice(char) ret;
+    d_string ret;
     char* p = (char*) memchr(from->data, sep, from->size);
 
     if (p) {
         ret.data = from->data;
-        ret.size = p - from->data;
+        ret.size = (int) (p - from->data);
         from->data = p + 1;
         from->size -= ret.size + 1;
     } else {
@@ -707,11 +707,11 @@ d_Slice(char) dv_split(d_Slice(char)* from, int sep)
 #define test(map, val) (map[(val) >> 5] & (1 << ((val) & 31)))
 #define set(map, val) map[(val) >> 5] |= 1 << ((val) & 31)
 
-d_Slice(char) dv_split2(d_Slice(char)* from, d_Slice(char) sep)
+d_string dv_split2(d_string* from, d_string sep)
 {
     uint32_t map[8] = {0, 0, 0, 0, 0, 0, 0, 0};
     uint8_t *u = (uint8_t*) from->data;
-    d_Slice(char) ret;
+    d_string ret;
     int i;
 
     for (i = 0; i < sep.size; i++) {
@@ -735,12 +735,24 @@ d_Slice(char) dv_split2(d_Slice(char)* from, d_Slice(char) sep)
 
 /* ------------------------------------------------------------------------- */
 
-d_Slice(char) dv_split_line(d_Slice(char)* from)
+d_string dv_split_line(d_string* from)
 {
-    d_Slice(char) ret = dv_split(from, '\n');
+    d_string ret = DV_INIT;
+    char* p = (char*) memchr(from->data, '\n', from->size);
+
+    if (!p) {
+        return ret;
+    }
+
+    ret.data = from->data;
+    ret.size = (int) (p - from->data);
+
     if (ret.size && ret.data[ret.size-1] == '\r') {
         ret.size--;
     }
+
+    from->size = (int) (from->data + from->size - (p + 1));
+    from->data = p + 1;
     return ret;
 }
 
@@ -766,7 +778,7 @@ d_Slice(char) dv_split_line(d_Slice(char)* from)
  * Getting Dot-Dot right,''
  * http://plan9.bell-labs.com/sys/doc/lexnames.html
  */
-static int clean_path(char* buf, int existing, d_Slice(char) pstr)
+static int clean_path(char* buf, int existing, d_string pstr)
 {
     int r, w, dotdot, n;
     bool rooted;
@@ -839,7 +851,7 @@ static int clean_path(char* buf, int existing, d_Slice(char) pstr)
     return w;
 }
 
-void dv_join_path(d_Vector(char)* v, int off, d_Slice(char) rel)
+void dv_join_path(d_vector(char)* v, int off, d_string rel)
 {
     int ret;
 
@@ -865,6 +877,6 @@ void dv_join_path(d_Vector(char)* v, int off, d_Slice(char) rel)
     }
 }
 
-void dv_clean_path(d_Vector(char)* v, d_Slice(char) path)
+void dv_clean_path(d_vector(char)* v, d_string path)
 { dv_join_path(v, v->size, path); }
 

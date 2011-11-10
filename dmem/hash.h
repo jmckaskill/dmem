@@ -33,66 +33,75 @@
 
 /* ------------------------------------------------------------------------- */
 
-typedef uint32_t khint_t;
-typedef struct dh_base dh_base;
+typedef struct d_map d_map;
 
-struct dh_base {
-    khint_t n_buckets, size, n_occupied, upper_bound;
+struct d_map {
+    uint32_t n_buckets, size, n_occupied, upper_bound;
     uint32_t *flags;
     size_t idx;
 };
 
 /* ------------------------------------------------------------------------- */
 
-DMEM_API void dh_erase_base(dh_base* h, size_t idx);
-DMEM_API void dh_clear_base(dh_base* h);
-DMEM_API void dh_free_base(dh_base* h, void* keys, void* vals);
-DMEM_API bool dh_hasnext_base(const dh_base* h, int* pidx);
+DMEM_API void dm_erase_base(d_map* h, size_t idx);
+DMEM_API void dm_clear_base(d_map* h);
+DMEM_API void dm_free_base(d_map* h);
+DMEM_API bool dm_hasnext_base(const d_map* h, int* pidx);
 
 /* ------------------------------------------------------------------------- */
 
-DMEM_API bool dhi_get_base(const dh_base* h, intmax_t key);
-DMEM_API bool dhi_add_base(dh_base* h, intmax_t key, size_t valsz);
+DMEM_API bool dm_i32_get_base(const d_map* h, int32_t key);
+DMEM_API bool dm_i64_get_base(const d_map* h, int64_t key);
+
+DMEM_API bool dm_i32_add_base(d_map* h, int32_t key, size_t valsz);
+DMEM_API bool dm_i64_add_base(d_map* h, int64_t key, size_t valsz);
 
 /* ------------------------------------------------------------------------- */
 
-DMEM_API bool dhs_get_base(const dh_base* h, d_Slice(char) key);
-DMEM_API bool dhs_add_base(dh_base* h, d_Slice(char) key, size_t valsz);
+DMEM_API bool dm_sget_base(const d_map* h, d_string key);
+DMEM_API bool dm_sadd_base(d_map* h, d_string key, size_t valsz);
 
 /* ------------------------------------------------------------------------- */
 
-#define DHASH_INIT_INT(name, khval_t)                                         \
+#define DMAP_INIT_INT(name, khval_t)                                          \
     typedef struct {                                                          \
-        dh_base base;                                                         \
-        intmax_t *keys;                                                       \
+        d_map base;                                                           \
+        int *keys;                                                            \
         khval_t* vals;                                                        \
-    } dhi_##name##_t
+    } d_imap_##name
 
-#define DHASH_INIT_STR(name, khval_t)                                         \
+#define DMAP_INIT_INT64(name, khval_t)                                        \
     typedef struct {                                                          \
-        dh_base base;                                                         \
-        d_Slice(char) *keys;                                                  \
+        d_map base;                                                           \
+        int64_t *keys;                                                        \
         khval_t* vals;                                                        \
-    } dhs_##name##_t
+    } d_imap_##name
 
-#define d_IntHash(name) dhi_##name##_t
-#define d_StringHash(name) dhs_##name##_t
+#define DMAP_INIT_STRING(name, khval_t)                                       \
+    typedef struct {                                                          \
+        d_map base;                                                           \
+        d_string *keys;                                                       \
+        khval_t* vals;                                                        \
+    } d_smap_##name
+
+#define d_imap(name) d_imap_##name
+#define d_smap(name) d_smap_##name
 
 /* ------------------------------------------------------------------------- */
 
 /* Key type agnostic functions */
-#define dh_size(h)              ((h)->base.size)
-#define dh_clear(h)             dh_clear_base(&(h)->base)
-#define dh_free(h)              dh_free_base(&(h)->base, (h)->keys, (h)->vals)
-#define dh_erase(h, idx)        dh_erase_base(&(h)->base, idx)
+#define dm_size(h)              ((h)->base.size)
+#define dm_clear(h)             dm_clear_base(&(h)->base)
+#define dm_free(h)              dm_free_base(&(h)->base)
+#define dm_erase(h, idx)        dm_erase_base(&(h)->base, idx)
 /* To iterate over the elements in a map:
  * int idx = -1;
- * while (dh_hasnext(&table, &idx)) {
+ * while (dm_hasnext(&table, &idx)) {
  *  // key is table.keys[idx]
  *  // value is table.vals[idx]
  * }
  */
-#define dh_hasnext(h, pidx)     dh_hasnext_base(&(h)->base, pidx)
+#define dm_hasnext(h, pidx)     dm_hasnext_base(&(h)->base, pidx)
 
 /* dhi_* are the integer key versions.
  * dhs_* are the string key versions.
@@ -112,15 +121,18 @@ DMEM_API bool dhs_add_base(dh_base* h, d_Slice(char) key, size_t valsz);
  * dh[is]_set: Sets h[key] = val.
  */
 
-#define dhi_get(h, key, pval)   (dhi_get_base(&(h)->base, key) && (*(pval) = (h)->vals[(h)->base.idx], true))
-#define dhi_find(h, key, pidx)  (dhi_get_base(&(h)->base, key) && (*(pidx) = (h)->base.idx, true))
-#define dhi_remove(h, key)      (dhi_get_base(&(h)->base, key) && (dh_erase_base(&(h)->base, (h)->base.idx), true))
-#define dhi_add(h, key, pidx)   (dhi_add_base(&(h)->base, key, sizeof((h)->vals[0])) ? ((*(pidx) = (h)->base.idx), true) : ((*(pidx) = (h)->base.idx), false))
-#define dhi_set(h, key, val)    (dhi_add_base(&(h)->base, key, sizeof((h)->vals[0])), ((h)->vals[(h)->base.idx] = (val)))
+#define dm_iget_base(h, key)    ((sizeof((h)->keys[0]) == sizeof(int64_t)) ? dm_i64_get_base(&(h)->base, (int64_t) (key)) : dm_i32_get_base(&(h)->base, (int32_t) (key)))
+#define dm_iadd_base(h, key)    ((sizeof((h)->keys[0]) == sizeof(int64_t)) ? dm_i64_add_base(&(h)->base, (int64_t) (key), sizeof((h)->vals[0])) : dm_i32_add_base(&(h)->base, (int32_t) (key), sizeof((h)->vals[0])))
 
-#define dhs_get(h, key, pval)   (dhs_get_base(&(h)->base, key) && (*(pval) = (h)->vals[(h)->base.idx], true))
-#define dhs_find(h, key, pidx)  (dhs_get_base(&(h)->base, key) && (*(pidx) = (h)->base.idx, true))
-#define dhs_remove(h, key)      (dhs_get_base(&(h)->base, key) && (dh_erase_base(&(h)->base, (h)->base.idx), true))
-#define dhs_add(h, key, pidx)   (dhs_add_base(&(h)->base, key, sizeof((h)->vals[0])) ? ((*(pidx) = (h)->base.idx), true) : ((*(pidx) = (h)->base.idx), false))
-#define dhs_set(h, key, val)    (dhs_add_base(&(h)->base, key, sizeof((h)->vals[0])), ((h)->vals[(h)->base.idx] = (val)))
+#define dm_iget(h, key, pval)   (dm_iget_base(h, key) && (*(pval) = (h)->vals[(h)->base.idx], true))
+#define dm_ifind(h, key, pidx)  (dm_iget_base(h, key) && (*(pidx) = (h)->base.idx, true))
+#define dm_iremove(h, key)      (dm_iget_base(h, key) && (dh_erase_base(&(h)->base, (h)->base.idx), true))
+#define dm_iadd(h, key, pidx)   (dm_iadd_base(h, key) ? ((*(pidx) = (h)->base.idx), true) : ((*(pidx) = (h)->base.idx), false))
+#define dm_iset(h, key, val)    (dm_iadd_base(h, key), ((h)->vals[(h)->base.idx] = (val)))
+
+#define dm_sget(h, key, pval)   (dm_sget_base(&(h)->base, key) && (*(pval) = (h)->vals[(h)->base.idx], true))
+#define dm_sfind(h, key, pidx)  (dm_sget_base(&(h)->base, key) && (*(pidx) = (h)->base.idx, true))
+#define dm_sremove(h, key)      (dm_sget_base(&(h)->base, key) && (dh_erase_base(&(h)->base, (h)->base.idx), true))
+#define dm_sadd(h, key, pidx)   (dm_sadd_base(&(h)->base, key, sizeof((h)->vals[0])) ? ((*(pidx) = (h)->base.idx), true) : ((*(pidx) = (h)->base.idx), false))
+#define dm_sset(h, key, val)    (dm_sadd_base(&(h)->base, key, sizeof((h)->vals[0])), ((h)->vals[(h)->base.idx] = (val)))
 
