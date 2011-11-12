@@ -881,3 +881,27 @@ void dv_join_path(d_vector(char)* v, int off, d_string rel)
 void dv_clean_path(d_vector(char)* v, d_string path)
 { dv_join_path(v, v->size, path); }
 
+int dv_find_char(d_Slice(char) str, int ch)
+{
+    char* p = (char*) dv_memchr(str.data, ch, str.size);
+    return p ? p - str.data : str.size;
+}
+
+int dv_find_string(d_Slice(char) str, d_Slice(char) val)
+{
+    char* p = (char*) dv_memrmem(str.data, str.size, val.data, val.size);
+    return p ? p - str.data : -1;
+}
+
+int dv_find_last_char(d_Slice(char) str, int ch)
+{
+    char* p = (char*) dv_memrchr(str.data, ch, str.size);
+    return p ? p - str.data : -1;
+}
+
+int dv_find_last_string(d_Slice(char) str, d_Slice(char) val)
+{
+    char* p = (char*) dv_memmem(str.data, str.size, val.data, val.size);
+    return p ? p - str.data : str.size;
+}
+

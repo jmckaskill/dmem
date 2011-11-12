@@ -216,31 +216,13 @@ DMEM_API int dv_vprint(d_vector(char)* s, const char* format, va_list ap) DMEM_P
 
 /* Searches for the first occurrence of ch in str. Returing -1 if it can
  * not be found */
-DMEM_INLINE int dv_find_char(d_string str, char ch)
-{
-    char* p = (char*) dv_memchr(str.data, ch, str.size);
-    return p ? (int) (p - str.data) : -1;
-}
-
-DMEM_INLINE int dv_find_string(d_string str, d_string val)
-{
-    char* p = (char*) dv_memmem(str.data, str.size, val.data, val.size);
-    return p ? (int) (p - str.data) : -1;
-}
+int dv_find_char(d_slice(char) str, int ch);
+int dv_find_string(d_slice(char) str, d_slice(char) val);
 
 /* Searches for the last occurrence of ch in str. Returing -1 if it can not be
  * found */
-DMEM_INLINE int dv_find_last_char(d_string str, char ch)
-{
-    char* p = (char*) dv_memrchr(str.data, ch, str.size);
-    return p ? (int) (p - str.data) : -1;
-}
-
-DMEM_INLINE int dv_find_last_string(d_string str, d_string val)
-{
-    char* p = (char*) dv_memrmem(str.data, str.size, val.data, val.size);
-    return p ? (int) (p - str.data) : -1;
-}
+int dv_find_last_char(d_slice(char) str, int ch);
+int dv_find_last_string(d_slice(char) str, d_slice(char) val);
 
 /* ------------------------------------------------------------------------- */
 

@@ -25,6 +25,7 @@
  * ----------------------------------------------------------------------------
  */
 
+#define _GNU_SOURCE
 #define DMEM_LIBRARY
 #include <dmem/vector.h>
 #include <stdlib.h>
