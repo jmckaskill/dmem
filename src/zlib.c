@@ -28,7 +28,7 @@
 #define DMEM_LIBRARY
 #include <dmem/zlib.h>
 
-int dz_deflate(d_Vector(char)* out, z_stream* z, d_Slice(char) str, int flush)
+int dz_deflate(d_vector(char)* out, z_stream* z, d_string str, int flush)
 {
     int err;
     int bufsz = deflateBound(z, str.size);
@@ -70,7 +70,7 @@ int dz_deflate(d_Vector(char)* out, z_stream* z, d_Slice(char) str, int flush)
     }
 }
 
-int dz_inflate_dict(d_Vector(char)* out, z_stream* z, d_Slice(char) str, d_Slice(char) dict)
+int dz_inflate_dict(d_vector(char)* out, z_stream* z, d_string str, d_string dict)
 {
     int err;
     int bufsz = str.size * 2;
@@ -102,6 +102,6 @@ int dz_inflate_dict(d_Vector(char)* out, z_stream* z, d_Slice(char) str, d_Slice
     }
 }
 
-int dz_inflate(d_Vector(char)* out, z_stream* z, d_Slice(char) str)
+int dz_inflate(d_vector(char)* out, z_stream* z, d_string str)
 { return dz_inflate_dict(out, z, str, C("")); }
 
