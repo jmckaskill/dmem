@@ -122,7 +122,7 @@ int utf16_to_utf8(uint8_t* dest, int dn, const uint16_t* src, int sn)
     return (int) (dp - dest);
 }
 
-void dv_to_utf8(d_Vector(char)* str, d_Slice(wchar) from)
+void dv_to_utf8(d_vector(char)* str, d_Slice(wchar) from)
 {
     int dn = 3 * (from.size + 1);
     uint8_t* dest = (uint8_t*) dv_append_buffer(str, dn);
@@ -242,7 +242,7 @@ int utf8_to_utf16(uint16_t* dest, int dn, const uint8_t* src, int sn)
     return (int) (dp - dest);
 }
 
-void dv_to_utf16(d_Vector(wchar)* wstr, d_Slice(char) from)
+void dv_to_utf16(d_vector(wchar)* wstr, d_string from)
 {
     int dn = from.size;
     uint16_t* dest = dv_append_buffer(wstr, dn);

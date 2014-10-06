@@ -74,15 +74,18 @@ void* dv_resize_base(void* p, int newsz)
 
 /* ------------------------------------------------------------------------- */
 
-void* dv_append_buffer_base(d_vector(char)* v, int num, int typesz)
+size_t dv_reserved_base(void* p)
+{ return p ? (size_t) ((uint64_t*) p)[-1] : 0; }
+
+void* dv_append_buffer_base(struct dv_base* v, int num, int typesz)
 {
     int oldsz = v->size * typesz;
     v->size += num;
-    v->data = (char*) dv_resize_base(v->data, v->size * typesz);
+    v->data = dv_resize_base(v->data, v->size * typesz);
     return v->data + oldsz;
 }
 
-void* dv_append_zeroed_base(d_vector(char)* v, int num, int typesz)
+void* dv_append_zeroed_base(struct dv_base* v, int num, int typesz)
 {
     void* ret = dv_append_buffer_base(v, num, typesz);
     memset(ret, 0, num * typesz);
@@ -91,20 +94,20 @@ void* dv_append_zeroed_base(d_vector(char)* v, int num, int typesz)
 
 /* ------------------------------------------------------------------------- */
 
-void* dv_insert_buffer_base(d_vector(char)* v, int idx, int num, int typesz)
+void* dv_insert_buffer_base(struct dv_base* v, int idx, int num, int typesz)
 {
     char* s;
     char* e;
     int after = (v->size - idx) * typesz;
     v->size += num;
-    v->data = (char*) dv_resize_base(v->data, v->size * typesz);
-    s = v->data + (idx * typesz);
-    e = s + (num * typesz);
+    v->data = dv_resize_base(v->data, v->size * typesz);
+    s = (char*) v->data + (idx * typesz);
+    e = (char*) s + (num * typesz);
     memmove(e, s, after);
     return s;
 }
 
-void* dv_insert_zeroed_base(d_vector(char)* v, int idx, int num, int typesz)
+void* dv_insert_zeroed_base(struct dv_base* v, int idx, int num, int typesz)
 {
     void* ret = dv_insert_buffer_base(v, idx, num, typesz);
     memset(ret, 0, num * typesz);
@@ -113,7 +116,23 @@ void* dv_insert_zeroed_base(d_vector(char)* v, int idx, int num, int typesz)
 
 /* ------------------------------------------------------------------------- */
 
-#ifndef DV_HAVE_MEMMEM
+int dv_cmp_base(void* adata, int asz, void* bdata, int bsz)
+{
+    int c;
+    int cmpsz = asz;
+    if (cmpsz > bsz) {
+        cmpsz = bsz;
+    }
+    c = memcmp(adata, bdata, bsz);
+    return c ? c : (asz - bsz);
+}
+
+/* ------------------------------------------------------------------------- */
+
+#ifdef DV_HAVE_MEMMEM
+void* dv_memmem(const void* hay, size_t hlen, const void* needle, size_t nlen)
+{ return memmem(hay, hlen, needle, nlen); }
+#else
 void* dv_memmem(const void* hay, size_t hlen, const void* needle, size_t nlen)
 {
     uint8_t* p = (uint8_t*) hay;
@@ -142,7 +161,10 @@ void* dv_memmem(const void* hay, size_t hlen, const void* needle, size_t nlen)
 
 /* ------------------------------------------------------------------------- */
 
-#ifndef DV_HAVE_MEMRMEM
+#ifdef DV_HAVE_MEMRMEM
+void* dv_memrmem(const void* hay, size_t hlen, const void* needle, size_t nlen)
+{ return memrmem(hay, hlen, needle, nlen)
+#else
 void* dv_memrmem(const void* hay, size_t hlen, const void* needle, size_t nlen)
 {
     uint8_t* p = (uint8_t*) hay + hlen;
@@ -171,10 +193,13 @@ void* dv_memrmem(const void* hay, size_t hlen, const void* needle, size_t nlen)
 
 /* ------------------------------------------------------------------------- */
 
-#ifndef DV_HAVE_MEMRCHR
+#ifdef DV_HAVE_MEMRCHR
+void* dv_memrchr(const void* s, int c, size_t n)
+{ return memrchr(s, c, n); }
+#else
 void* dv_memrchr(const void* s, int c, size_t n)
 {
-    uint8_t* p = (uint8_t*) s;
+    uint8_t* p = (uint8_t*) s + n;
     while (p >= (uint8_t*) s) {
         if (*p == c) {
             return p;

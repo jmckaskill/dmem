@@ -49,10 +49,10 @@ typedef struct dj_Builder dj_Builder;
 DECLARE_DELEGATE_1(dj_Delegate, bool, dj_Node*);
 
 struct dj_Node {
-    d_Slice(char)   key;
+    d_string   key;
 
     dj_NodeType     type;
-    d_Slice(char)   string;
+    d_string   string;
     bool            boolean;
     double          number;
 
@@ -61,16 +61,16 @@ struct dj_Node {
 
 #define dj_Bind(func, obj) BIND1(dj_Delegate, func, obj, dj_Node**)
 
-DMEM_API int dj_parse(d_Slice(char) str, dj_Delegate dlg, d_Vector(char)* errstr);
+DMEM_API int dj_parse(d_string str, dj_Delegate dlg, d_vector(char)* errstr);
 
 DMEM_API dj_Parser* dj_new_parser(dj_Delegate dlg);
-DMEM_API int dj_parse_chunk(dj_Parser* p, d_Slice(char) str);
+DMEM_API int dj_parse_chunk(dj_Parser* p, d_string str);
 DMEM_API int dj_parse_complete(dj_Parser* p);
-DMEM_API d_Slice(char) dj_parse_error(dj_Parser* p);
+DMEM_API d_string dj_parse_error(dj_Parser* p);
 DMEM_API void dj_free_parser(dj_Parser* p);
 
 struct dj_Builder {
-    d_Vector(char) out;
+    d_vector(char) out;
     int depth;
     bool just_started_object;
     bool have_key;
@@ -84,8 +84,8 @@ DMEM_API void dj_end_object(dj_Builder* b);
 DMEM_API void dj_start_array(dj_Builder* b);
 DMEM_API void dj_end_array(dj_Builder* b);
 
-DMEM_API void dj_append_key(dj_Builder* b, d_Slice(char) key);
-DMEM_API void dj_append_string(dj_Builder* b, d_Slice(char) value);
+DMEM_API void dj_append_key(dj_Builder* b, d_string key);
+DMEM_API void dj_append_string(dj_Builder* b, d_string value);
 DMEM_API void dj_append_number(dj_Builder* b, double value);
 DMEM_API void dj_append_boolean(dj_Builder* b, bool value);
 DMEM_API void dj_append_null(dj_Builder* b);

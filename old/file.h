@@ -33,20 +33,22 @@
 
 /* ------------------------------------------------------------------------- */
 
+typedef struct dv_dir dv_dir;
+
 struct dv_dir {
     void* u;
     int fd;
-    d_Slice(char) path;
+    d_string path;
 #ifdef _WIN32
-    d_Slice(wchar) wpath;
+    d_wstring wpath;
 #endif
 };
 
-DMEM_API int dv_read_file(d_Vector(char)* v, d_Slice(char) path, dv_dir* dir);
-DMEM_API int dv_read(d_Vector(char)* v, int fd);
+DMEM_API int dv_read_file(d_vector(char)* v, d_string path, dv_dir* dir);
+DMEM_API int dv_read(d_vector(char)* v, int fd);
 
-DMEM_API int dv_open_dir(d_Slice(char) path, dv_dir* dir);
-DMEM_API bool dv_read_dir(dv_dir* d, d_Slice(char)* file, bool* isdir);
+DMEM_API int dv_open_dir(d_string path, dv_dir* dir);
+DMEM_API bool dv_read_dir(dv_dir* d, d_string* file, bool* isdir);
 DMEM_API void dv_close_dir(dv_dir* d);
 
 #if _XOPEN_SOURCE + 0 >= 700 || _POSIX_C_SOURCE + 0 >= 200809L

@@ -36,35 +36,39 @@
 
 /* ------------------------------------------------------------------------- */
 
-#ifdef __GLIBC__
+#if defined __GLIBC__ && !defined __UCLIBC__
 #define DV_HAVE_MEMMEM
 #define DV_HAVE_MEMRCHR
 #elif defined __APPLE__
 #define DV_HAVE_MEMMEM
 #endif
 
-#ifdef DV_HAVE_MEMMEM
-#define dv_memmem(h, hl, n, nl) memmem(h, hl, n, nl)
-#else
-DMEM_API void* dv_memmem(const void* hay, size_t haylen, const void* needle, size_t needlelen);
-#endif
-
-#ifdef DV_HAVE_MEMRCHR
-#define dv_memrchr(s, c, n) memrchr(s, c, n)
-#else
-DMEM_API void* dv_memrchr(const void* s, int c, size_t n);
-#endif
-
 /* always available */
 #define dv_memchr memchr
-
 DMEM_API void* dv_memrmem(const void* hay, size_t haylen, const void* needle, size_t needlelen);
+DMEM_API void* dv_memmem(const void* hay, size_t haylen, const void* needle, size_t needlelen);
+DMEM_API void* dv_memrchr(const void* s, int c, size_t n);
 
 /* ------------------------------------------------------------------------- */
 
 /* Declares a new vector d_vector(name) and slice d_slice(name) that holds
  * 'type' data values
  */
+#ifdef __cplusplus
+#define DVECTOR_INIT(name, type)                                            \
+    struct d_slice_##name {                                                 \
+        int size;                                                           \
+        type* data;                                                         \
+    };                                                                      \
+    struct d_vector_##name {                                                \
+        int size;                                                           \
+        type* data;                                                         \
+        operator d_slice_##name() const {                                   \
+            d_slice_##name ret = {size, data};                              \
+            return ret;                                                     \
+        }                                                                   \
+    };
+#else
 #define DVECTOR_INIT(name, type)                                            \
     typedef struct d_vector_##name d_vector_##name;                         \
     typedef struct d_vector_##name d_slice_##name;                          \
@@ -73,33 +77,10 @@ DMEM_API void* dv_memrmem(const void* hay, size_t haylen, const void* needle, si
         int size;                                                           \
         type* data;                                                         \
     }
+#endif
 
-/* Static initializer for vectors 'd_vector(name) foo = DV_INIT;' */
-#define DV_INIT {0,NULL}
 #define d_vector(name) d_vector_##name
 #define d_slice(name) d_slice_##name
-
-/* Declare some basic vectors for the built in types */
-DVECTOR_INIT(int, int);
-
-#ifdef __cplusplus
-struct d_string {
-    int size;
-    const char* data;
-};
-struct d_vector_char {
-    int size;
-    char* data;
-    operator d_string() const {
-        d_string ret = {size, data};
-        return ret;
-    }
-};
-typedef d_vector_char d_slice_char;
-#else
-DVECTOR_INIT(char, char);
-typedef d_slice(char) d_string;
-#endif
 
 /* ------------------------------------------------------------------------- */
 
@@ -111,34 +92,44 @@ T* dv_cast(T* p, void* u)
 #define dv_cast(DATA, PTR) (PTR)
 #endif
 
-#define dv_datasize(VEC) ((int) sizeof((VEC).data[(VEC).size]))
-#define dv_pdatasize(PVEC) ((int) sizeof((PVEC)->data[(PVEC)->size]))
+#define dv_datasize(VEC) ((int) sizeof((VEC).data[0]))
+#define dv_pdatasize(PVEC) ((int) sizeof((PVEC)->data[0]))
+
+struct dv_base {
+    int size;
+    void* data;
+};
 
 DMEM_API void* dv_resize_base(void* p, int newsz);
+DMEM_API size_t dv_reserved_base(void* p);
 DMEM_API void dv_free_base(void* p);
-DMEM_API void* dv_append_buffer_base(d_vector(char)* v, int num, int typesz);
-DMEM_API void* dv_append_zeroed_base(d_vector(char)* v, int num, int typesz);
-DMEM_API void* dv_insert_buffer_base(d_vector(char)* v, int idx, int num, int typesz);
-DMEM_API void* dv_insert_zeroed_base(d_vector(char)* v, int idx, int num, int typesz);
+DMEM_API void* dv_append_buffer_base(struct dv_base* v, int num, int typesz);
+DMEM_API void* dv_append_zeroed_base(struct dv_base* v, int num, int typesz);
+DMEM_API void* dv_insert_buffer_base(struct dv_base* v, int idx, int num, int typesz);
+DMEM_API void* dv_insert_zeroed_base(struct dv_base* v, int idx, int num, int typesz);
 
 /* ------------------------------------------------------------------------- */
+
+/* Static initializer for vectors 'd_vector(name) foo = DV_INIT;' */
+#define DV_INIT {0,NULL}
+
+/* Dynamic initializer */
+#define dv_init(PVEC) ((PVEC)->data = NULL, (PVEC)->size = 0)
 
 /* Frees the data in 'VEC'*/
 #define dv_free(VEC) dv_free_base((VEC).data)
 
-/* ------------------------------------------------------------------------- */
-
-/* Resets the vector 'PVEC' to size zero */
-#define dv_clear(PVEC) ((PVEC)->size = 0)
-
-/* ------------------------------------------------------------------------- */
-
 /* Reserves enough space in the vector to hold 'newsz' values */
 #define dv_reserve(PVEC, NEWSZ) ((PVEC)->data = dv_cast((PVEC)->data, dv_resize_base((PVEC)->data, (NEWSZ) * dv_pdatasize(PVEC))))
-#define dv_reserved(VEC) ((VEC).data ? (int) ((uint64_t*) (VEC).data)[-1] : 0)
+
+/* Returns the amount of space reserved in the vector */
+#define dv_reserved(VEC) dv_reserved_base((VEC).data)
 
 /* Resizes the vector to hold 'newsz' values */
 #define dv_resize(PVEC, NEWSZ) ((PVEC)->size = NEWSZ, dv_reserve(PVEC, (PVEC)->size))
+
+/* Resets the vector 'PVEC' ready for reuse */
+#define dv_clear(PVEC) dv_resize(PVEC, 0)
 
 /* ------------------------------------------------------------------------- */
 
@@ -146,15 +137,15 @@ DMEM_API void* dv_insert_zeroed_base(d_vector(char)* v, int idx, int num, int ty
  * the added space - IDX and NUM are evaluated only once before the resize
  * occurs. The _zeroed form also zeros the added buffer.
  */
-#define dv_insert_buffer(PVEC, IDX, NUM) dv_cast((PVEC)->data, dv_insert_buffer_base((d_vector(char)*) (PVEC), IDX, NUM, dv_pdatasize(PVEC)))
-#define dv_insert_zeroed(PVEC, IDX, NUM) dv_cast((PVEC)->data, dv_insert_zeroed_base((d_vector(char)*) (PVEC), IDX, NUM, dv_pdatasize(PVEC)))
+#define dv_insert_buffer(PVEC, IDX, NUM) dv_cast((PVEC)->data, dv_insert_buffer_base((struct dv_base*) (PVEC), IDX, NUM, dv_pdatasize(PVEC)))
+#define dv_insert_zeroed(PVEC, IDX, NUM) dv_cast((PVEC)->data, dv_insert_zeroed_base((struct dv_base*) (PVEC), IDX, NUM, dv_pdatasize(PVEC)))
 
 /* Adds space for NUM values at the end of the vector and returns a pointer to
  * the beginning of the added space - NUM is only evaluated once before the
  * append occurs. The _zeroed form also zeros the added buffer.
  */
-#define dv_append_buffer(PVEC, NUM) dv_cast((PVEC)->data, dv_append_buffer_base((d_vector(char)*) (PVEC), NUM, dv_pdatasize(PVEC)))
-#define dv_append_zeroed(PVEC, NUM) dv_cast((PVEC)->data, dv_append_zeroed_base((d_vector(char)*) (PVEC), NUM, dv_pdatasize(PVEC)))
+#define dv_append_buffer(PVEC, NUM) dv_cast((PVEC)->data, dv_append_buffer_base((struct dv_base*) (PVEC), NUM, dv_pdatasize(PVEC)))
+#define dv_append_zeroed(PVEC, NUM) dv_cast((PVEC)->data, dv_append_zeroed_base((struct dv_base*) (PVEC), NUM, dv_pdatasize(PVEC)))
 
 /* ------------------------------------------------------------------------- */
 
@@ -217,7 +208,7 @@ void dv_append(T* to, F from)
     do {                                                                    \
         STATIC_ASSERT(sizeof((DATA)[0]) == dv_pdatasize(PTO));              \
         dv_resize(PTO, SZ);                                                 \
-        memcpy(PTO, DATA, (PTO)->size * dv_pdatasize(PTO));                 \
+        memcpy((PTO)->data, DATA, (PTO)->size * dv_pdatasize(PTO));         \
     } while(0)
 
 /* ------------------------------------------------------------------------- */
@@ -338,20 +329,19 @@ void dv_insert(T* to, int idx, U from)
 
 /* ------------------------------------------------------------------------- */
 
+DMEM_API int dv_cmp_base(void* adata, int asz, void* bdata, int bsz);
+
 /* Does a memcmp between the data in VEC1 and VEC2. Evaluates VEC1 and VEC2
  * multiple times. */
-#define dv_cmp(VEC1, VEC2) ((VEC1).size == (VEC2).size ? memcmp((VEC1).data, (VEC2).data, (VEC1).size * dv_datasize(VEC1)) : (VEC2).size - (VEC1).size)
+#define dv_cmp(VEC1, VEC2) dv_cmp_base((VEC1).data, (VEC1).size * dv_datasize(VEC1), (VEC2).data, (VEC2).size * dv_datasize(VEC2))
 
-/* Returns VEC1 == VEC2. Evaluats VEC1 and VEC2 multiple times. */
-#define dv_equals(VEC1, VEC2) ((VEC1).size == (VEC2).size && 0 == memcmp((VEC1).data, (VEC2).data, (VEC1).size * dv_datasize(VEC1)))
+/* Returns VEC1 == VEC2. Evaluates VEC1 and VEC2 multiple times. */
+#define dv_equals(VEC1, VEC2) (dv_datasize(VEC1) == dv_datasize(VEC2) && (VEC1).size == (VEC2).size && 0 == memcmp((VEC1).data, (VEC2).data, (VEC1).size * dv_datasize(VEC1)))
 
-/* Returns the last value in the vector - note the vector must be non-empty. */
-#define dv_last(VEC) ((VEC).data[(VEC).size - 1])
-
-/* Returns whether the char slice/vector 'VEC' begins with the slice 'TEST'.
+/* Returns whether the slice/vector 'VEC' begins with the slice 'TEST'.
  * Evaluates VEC and TEST multiple times. */
-#define dv_begins_with(VEC, TEST) ((VEC).size > (TEST).size && 0 == memcmp((VEC).data, (TEST).data, (TEST).size * dv_datasize(VEC)))
+#define dv_begins_with(VEC, TEST) ((VEC).size >= (TEST).size && 0 == memcmp((VEC).data, (TEST).data, (TEST).size * dv_datasize(VEC)))
 
-/* Returns whether the char slice/vector 'VEC' ends with the slice 'TEST'.
+/* Returns whether the slice/vector 'VEC' ends with the slice 'TEST'.
  * Evaluates VEC and TEST multiple times. */
-#define dv_ends_with(VEC, TEST) ((VEC).size > (TEST).size && 0 == memcmp((VEC).data + (VEC).size - (TEST).size, (TEST).data, (TEST).size * dv_datasize(VEC)))
+#define dv_ends_with(VEC, TEST) ((VEC).size >= (TEST).size && 0 == memcmp((VEC).data + (VEC).size - (TEST).size, (TEST).data, (TEST).size * dv_datasize(VEC)))

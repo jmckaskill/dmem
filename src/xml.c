@@ -51,7 +51,7 @@ static void ThrowError(dx_Parser* p, const char* format, ...)
 
 #define UNICODE_MAX 0x10FFFF
 
-static void AppendUtf8(d_Vector(char)* buffer, long ch)
+static void AppendUtf8(d_vector(char)* buffer, long ch)
 {
     uint8_t out[4];
 
@@ -90,9 +90,9 @@ static bool IsWhitespace(char ch)
 
 /* ------------------------------------------------------------------------- */
 
-static bool ReplaceEscapedValue(d_Vector(char)* buffer, int begin)
+static bool ReplaceEscapedValue(d_vector(char)* buffer, int begin)
 {
-    d_Slice(char) str = dv_right(*buffer, begin);
+    d_string str = dv_right(*buffer, begin);
 
     if (dv_begins_with(str, C("&#x"))) {
         /* &#x33; */
@@ -152,7 +152,7 @@ static bool ReplaceEscapedValue(d_Vector(char)* buffer, int begin)
 
 /* ------------------------------------------------------------------------- */
 
-static d_Slice(char) GetToken(dx_Parser* s, const char** pb, const char* e)
+static d_string GetToken(dx_Parser* s, const char** pb, const char* e)
 {
     const char* b = *pb;
     const char* p = b;
@@ -181,7 +181,7 @@ static d_Slice(char) GetToken(dx_Parser* s, const char** pb, const char* e)
 
 /* ------------------------------------------------------------------------- */
 
-static d_Slice(char) FromOffset(dx_Parser* s, dxi_OffsetString str)
+static d_string FromOffset(dx_Parser* s, dxi_OffsetString str)
 {
     if (str.data) {
         return dv_char2(str.data, str.size);
@@ -191,7 +191,7 @@ static d_Slice(char) FromOffset(dx_Parser* s, dxi_OffsetString str)
 }
 
 
-static dxi_OffsetString TokenToOffset(dx_Parser* s, d_Slice(char) token)
+static dxi_OffsetString TokenToOffset(dx_Parser* s, d_string token)
 {
     dxi_OffsetString ret;
     ret.size = token.size;
@@ -210,7 +210,7 @@ static dxi_OffsetString TokenToOffset(dx_Parser* s, d_Slice(char) token)
 
 /* ------------------------------------------------------------------------- */
 
-static d_Slice(char) GetString(
+static d_string GetString(
         dx_Parser*      s,
         const char**    pb,
         const char*     e,
@@ -328,7 +328,7 @@ static const char* SearchForCharacter(dx_Parser* p, const char* b, const char* e
 
 /* ------------------------------------------------------------------------- */
 
-static dxi_Scope* PushScope(dx_Parser* s, dx_Node* node, const char* b, d_Slice(char)* inner_xml)
+static dxi_Scope* PushScope(dx_Parser* s, dx_Node* node, const char* b, d_string* inner_xml)
 {
     dxi_Scope* scope = dv_append_zeroed(&s->scopes, 1);
     scope->tag = s->current_tag;
@@ -375,9 +375,9 @@ static dxi_Scope* PopScope(dx_Parser* s)
 
 static void SetupNode(dx_Parser* s, dxi_Scope* scope, dx_Node* node)
 {
-    d_Slice(char) tag;
-    d_Slice(char) alias = DV_INIT;
-    d_Slice(char) ns = DV_INIT;
+    d_string tag;
+    d_string alias = DV_INIT;
+    d_string ns = DV_INIT;
     int i, j, colon;
 
     memset(node, 0, sizeof(dx_Node));
@@ -429,13 +429,13 @@ static void SetupNode(dx_Parser* s, dxi_Scope* scope, dx_Node* node)
     }
 }
 
-int dx_parse_chunk(dx_Parser* s, d_Slice(char) str)
+int dx_parse_chunk(dx_Parser* s, d_string str)
 {
     const char* b = str.data;
     const char* e = b + str.size;
     dx_Node node;
-    d_Slice(char) token, tag;
-    d_Slice(char) inner_xml = str;
+    d_string token, tag;
+    d_string inner_xml = str;
     dxi_Scope* scope = NULL;
     int ret;
 
@@ -730,7 +730,7 @@ int dx_parse_chunk(dx_Parser* s, d_Slice(char) str)
             s->in_namespace_attribute = true;
 
         } else if (dv_begins_with(token, C("xmlns:"))) {
-            d_Vector(char) ns = DV_INIT;
+            d_vector(char) ns = DV_INIT;
             dv_set(&ns, dv_right(token, C("xmlns:").size));
             dv_append1(&s->namespaces, ns);
             s->in_namespace_attribute = true;
@@ -780,7 +780,7 @@ int dx_parse_chunk(dx_Parser* s, d_Slice(char) str)
         token = GetString(s, &b, e, '\'');
 
         if (s->in_namespace_attribute) {
-            d_Vector(char) ns = DV_INIT;
+            d_vector(char) ns = DV_INIT;
             dv_set(&ns, token);
             dv_append1(&s->namespaces, ns);
         } else {
@@ -797,7 +797,7 @@ int dx_parse_chunk(dx_Parser* s, d_Slice(char) str)
         token = GetString(s, &b, e, '\"');
 
         if (s->in_namespace_attribute) {
-            d_Vector(char) ns = DV_INIT;
+            d_vector(char) ns = DV_INIT;
             dv_set(&ns, token);
             dv_append1(&s->namespaces, ns);
         } else {
@@ -930,7 +930,7 @@ void dx_free_parser(dx_Parser* s)
 
 /* ------------------------------------------------------------------------- */
 
-d_Slice(char) dx_parse_error(dx_Parser* s)
+d_string dx_parse_error(dx_Parser* s)
 {
     return s->error_buffer;
 }
@@ -941,7 +941,7 @@ d_Slice(char) dx_parse_error(dx_Parser* s)
 
 /* ------------------------------------------------------------------------- */
 
-bool dx_parse(d_Slice(char) str, dx_Delegate dlg, d_Vector(char)* errstr)
+bool dx_parse(d_string str, dx_Delegate dlg, d_vector(char)* errstr)
 {
     int ret;
     dx_Parser* s = dx_new_parser(dlg);
@@ -953,7 +953,7 @@ bool dx_parse(d_Slice(char) str, dx_Delegate dlg, d_Vector(char)* errstr)
 
 /* ------------------------------------------------------------------------- */
 
-d_Slice(char) dx_attribute(const dx_Node* element, d_Slice(char) name)
+d_string dx_attribute(const dx_Node* element, d_string name)
 {
     int i;
     for (i = 0; i < element->attributes.size; i++) {
@@ -968,10 +968,10 @@ d_Slice(char) dx_attribute(const dx_Node* element, d_Slice(char) name)
 
 /* ------------------------------------------------------------------------- */
 
-bool dx_boolean_attribute(const dx_Node* element, d_Slice(char) name)
+bool dx_boolean_attribute(const dx_Node* element, d_string name)
 { return dv_to_boolean(dx_attribute(element, name)); }
 
-double dx_number_attribute(const dx_Node* element, d_Slice(char) name)
+double dx_number_attribute(const dx_Node* element, d_string name)
 { return dv_to_number(dx_attribute(element, name)); }
 
 
@@ -979,7 +979,7 @@ double dx_number_attribute(const dx_Node* element, d_Slice(char) name)
 
 /* ------------------------------------------------------------------------- */
 
-void dv_append_xml_decoded(d_Vector(char)* out, d_Slice(char) text)
+void dv_append_xml_decoded(d_vector(char)* out, d_string text)
 {
     const char* b = text.data;
     const char* p = b;
@@ -1014,7 +1014,7 @@ void dv_append_xml_decoded(d_Vector(char)* out, d_Slice(char) text)
 
 /* ------------------------------------------------------------------------- */
 
-void dv_append_xml_encoded(d_Vector(char)* out, d_Slice(char) text)
+void dv_append_xml_encoded(d_vector(char)* out, d_string text)
 {
     const char* b = text.data;
     const char* p = b;
@@ -1079,7 +1079,7 @@ void dx_destroy_builder(dx_Builder* b)
 
 /* ------------------------------------------------------------------------- */
 
-void dx_start_element(dx_Builder* b, d_Slice(char) tag)
+void dx_start_element(dx_Builder* b, d_string tag)
 {
     if (b->in_element) {
         dv_append(&b->out, C(">"));
@@ -1092,7 +1092,7 @@ void dx_start_element(dx_Builder* b, d_Slice(char) tag)
 
 /* ------------------------------------------------------------------------- */
 
-void dx_end_element(dx_Builder* b, d_Slice(char) tag)
+void dx_end_element(dx_Builder* b, d_string tag)
 {
     if (b->in_element) {
         dv_append(&b->out, C("/>"));
@@ -1107,7 +1107,7 @@ void dx_end_element(dx_Builder* b, d_Slice(char) tag)
 
 /* ------------------------------------------------------------------------- */
 
-void dx_append_attribute(dx_Builder* b, d_Slice(char) key, d_Slice(char) value)
+void dx_append_attribute(dx_Builder* b, d_string key, d_string value)
 {
     assert(b->in_element);
     dv_append(&b->out, C(" "));
@@ -1119,7 +1119,7 @@ void dx_append_attribute(dx_Builder* b, d_Slice(char) key, d_Slice(char) value)
 
 /* ------------------------------------------------------------------------- */
 
-void dx_append_number_attribute(dx_Builder* b, d_Slice(char) key, double value)
+void dx_append_number_attribute(dx_Builder* b, d_string key, double value)
 {
     assert(b->in_element);
     dv_append(&b->out, C(" "));
@@ -1131,7 +1131,7 @@ void dx_append_number_attribute(dx_Builder* b, d_Slice(char) key, double value)
 
 /* ------------------------------------------------------------------------- */
 
-void dx_append_boolean_attribute(dx_Builder* b, d_Slice(char) key, bool value)
+void dx_append_boolean_attribute(dx_Builder* b, d_string key, bool value)
 {
     assert(b->in_element);
     dv_append(&b->out, C(" "));
@@ -1143,7 +1143,7 @@ void dx_append_boolean_attribute(dx_Builder* b, d_Slice(char) key, bool value)
 
 /* ------------------------------------------------------------------------- */
 
-void dx_append_xml(dx_Builder* b, d_Slice(char) text)
+void dx_append_xml(dx_Builder* b, d_string text)
 {
     if (b->in_element) {
         dv_append(&b->out, C(">"));
@@ -1155,7 +1155,7 @@ void dx_append_xml(dx_Builder* b, d_Slice(char) text)
 
 /* ------------------------------------------------------------------------- */
 
-void dx_append_text(dx_Builder* b, d_Slice(char) text)
+void dx_append_text(dx_Builder* b, d_string text)
 {
     if (b->in_element) {
         dv_append(&b->out, C(">"));

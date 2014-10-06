@@ -1,4 +1,4 @@
-/* vim: ts=4 sw=4 sts=4 et
+/* vim: ts=4 sw=4 sts=4 et tw=78
  *
  * Copyright (c) 2009 James R. McKaskill
  *
@@ -25,45 +25,11 @@
  * ----------------------------------------------------------------------------
  */
 
-#include <dmem/char.h>
+#pragma once
 
-int main(void)
-{
-    d_Vector(char) p = DV_INIT;
+#include "char.h"
+#include <delegate.h>
 
-#define TEST(from, to)                                                          \
-    dv_set(&p, C(from));						                                \
-    dv_clean_path(&p, 0);                                                       \
-    fprintf(stderr, "%s %s %.*s\n", from, to, DV_PRI(p));                       \
-    assert(dv_equals(p, C(to)))
-
-    TEST("/", "/");
-    TEST("/..", "/");
-    TEST("/../", "/");
-    TEST("//", "/");
-    TEST("/./", "/");
-    TEST("/.//", "/");
-    TEST("/foo/..", "/");
-    TEST("/foo/../", "/");
-    TEST("/foo/.", "/foo");
-    TEST("/foo/./", "/foo");
-    TEST("/foo/bar", "/foo/bar");
-    TEST("/foo/bar/", "/foo/bar");
-    TEST("/foo//bar", "/foo/bar");
-    TEST("/foo/./bar", "/foo/bar");
-    TEST("/foo/../bar", "/bar");
-    TEST("/foo/../bar/", "/bar");
-    TEST("/foo/bar/..", "/foo");
-    TEST("", ".");
-    TEST("foo", "foo");
-    TEST("foo/bar", "foo/bar");
-    TEST("foo//bar", "foo/bar");
-    TEST("foo/./../bar", "bar");
-    TEST("foo/../../bar", "../bar");
-
-    dv_free(p);
-
-    return 0;
-}
-
+DECLARE_DELEGATE_1(SliceDelegate, int, d_string);
+#define BindSlice(func, obj) BIND1(SliceDelegate, func, obj, d_string*)
 

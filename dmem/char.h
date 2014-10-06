@@ -29,35 +29,10 @@
 
 #include "vector.h"
 
-typedef struct d_kv_pair d_kv_pair;
-
-struct d_kv_pair {
-    d_string key;
-    d_string val;
-};
-
-DVECTOR_INIT(char_vector, d_vector(char));
-DVECTOR_INIT(string, d_string);
-DVECTOR_INIT(kv_pair, d_kv_pair);
-
-DMEM_INLINE void dkv_append(d_vector(kv_pair)* v, d_string key, d_string val)
-{
-    d_kv_pair kv;
-    kv.key = key;
-    kv.val = val;
-    dv_append1(v, kv);
-}
+DVECTOR_INIT(char, char);
+typedef d_slice(char) d_string;
 
 /* ------------------------------------------------------------------------- */
-
-DMEM_INLINE void dv_clear_string_vector(d_vector(char_vector)* vec)
-{
-    int i;
-    for (i = 0; i < vec->size; i++) {
-        dv_free(vec->data[i]);
-    }
-    dv_clear(vec);
-}
 
 /* Macro to wrap char slices/vectors for printing with printf - use "%.*s" in
  * the format string.
@@ -66,16 +41,30 @@ DMEM_INLINE void dv_clear_string_vector(d_vector(char_vector)* vec)
 
 /* ------------------------------------------------------------------------- */
 
+/* Returns a slice for the null terminated string 'str' */
+DMEM_INLINE d_string dv_char(const char* str)
+{ d_string ret = {str ? (int) strlen(str) : 0, (char*) str}; return ret; }
+
+#ifdef __cplusplus
+DMEM_INLINE d_string dv_char(char* str)
+{ d_string ret = {str ? (int) strlen(str) : 0, str}; return ret; }
+
+/* Overload for std::string and compatible interfaces */
+template <class T>
+DMEM_INLINE d_string dv_char(const T& str)
+{ d_string ret = {str.size(), str.c_str()}; return ret; }
+#endif
+
 DMEM_INLINE d_string dv_char2(const char* str, size_t size)
 { d_string ret = {(int) size, (char*) str}; return ret; }
 
 #ifdef __cplusplus
-DMEM_INLINE d_slice(char) dv_char2(char* str, size_t size)
-{ d_slice(char) ret = {(int) size, str}; return ret; }
+DMEM_INLINE d_string dv_char2(char* str, size_t size)
+{ d_string ret = {(int) size, str}; return ret; }
 #endif
 
-/* Macro to convert char string literals into a d_Slice(char) */
-#if __STDC_VERSION__+0 == 199901L
+/* Macro to convert char string literals into a d_string */
+#if __STDC_VERSION__+0 >= 199901L
 #define C(STR) ((d_string) {sizeof(STR)-1, STR})
 #define C2(P, LEN) ((d_string) {P, LEN})
 #else
@@ -83,10 +72,14 @@ DMEM_INLINE d_slice(char) dv_char2(char* str, size_t size)
 #define C2(P, LEN) dv_char2(P, LEN)
 #endif
 
-/* Macro to convert a d_slice(char) to a std::string */
+/* Macro to convert a d_string to a std::string */
 #define dv_to_string(slice) std::string((slice).data, (slice).data + (slice).size)
 
 /* ------------------------------------------------------------------------- */
+
+typedef struct { uint32_t d[8]; } dv_char_mask;
+
+DMEM_API dv_char_mask dv_create_mask(d_string chars);
 
 /* Appends a base64 encoded version of 'from' to 'to' */
 DMEM_API void dv_base64_encode(d_vector(char)* to, d_string from);
@@ -95,33 +88,39 @@ DMEM_API void dv_base64_encode(d_vector(char)* to, d_string from);
 DMEM_API void dv_hex_decode(d_vector(char)* to, d_string from);
 DMEM_API void dv_hex_encode(d_vector(char)* to, d_string from);
 
-/* Appends a quoted version of 'from' to 'to' */
-DMEM_API void dv_quote(d_vector(char)* to, d_string from, char quote);
+/* Appends a quoted version of 'from' to 'to'. keep is optional giving the
+ * mask of characters to keep. */
+DMEM_API void dv_quote(d_vector(char)* to, d_string from, dv_char_mask* keep);
 
-/* URL decodes val in place, updating the new slice bounds. Returns zero on
- * success. */
-DMEM_API int dv_url_decode(d_slice(char)* val);
+/* Appends a url decoded version of 'from' to 'to' */
+DMEM_API void dv_url_decode(d_vector(char)* to, d_string from);
 
-/* Appends a url encoded version of 'from' to 'to' */
-DMEM_API void dv_url_encode(d_vector(char)* to, d_string from);
+/* Appends a url encoded version of 'from' to 'to'. keep is optional giving
+ * the mask of characters to keep. */
+DMEM_API void dv_url_encode(d_vector(char)* to, d_string from, dv_char_mask* keep);
 
 /* ------------------------------------------------------------------------- */
 
 /* Searches in from for sep (or the bytes in sep). Updating from with the
  * remaining slice after the seperator and returns the slice before the
- * seperator. Will return the whole string if sep can not be found.
+ * seperator. Will return the whole string if sep can not be found. Multiple
+ * seperators in a row will return empty strings.
  */
-DMEM_API d_string dv_split(d_string* from, int sep);
-DMEM_API d_string dv_split2(d_string* from, d_string sep);
+DMEM_API d_string dv_split_char(d_string* from, int sep);
+DMEM_API d_string dv_split_one_of(d_string* from, d_string sep);
+DMEM_API d_string dv_split_string(d_string* from, d_string sep);
 
-#ifdef __cplusplus
-DMEM_INLINE d_slice(char) dv_spit(d_slice(char)* from, int sep)
-{ d_string ret = dv_split((d_string*) from, sep); return *(d_slice(char)*) &ret; }
+/* Searches for the first occurrence of ch in str. Returing -1 if it can
+ * not be found */
+DMEM_API int dv_find_char(d_string str, int ch);
+DMEM_API int dv_find_one_of(d_string str, d_string sep);
+DMEM_API int dv_find_string(d_string str, d_string val);
 
-DMEM_INLINE d_slice(char) dv_spit2(d_slice(char)* from, int sep)
-{ d_string ret = dv_split2((d_string*) from, sep); return *(d_slice(char)*) &ret; }
-#endif
-
+/* Searches for the last occurrence of ch in str. Returing -1 if it can not be
+ * found */
+DMEM_API int dv_find_last_char(d_string str, int ch);
+DMEM_API int dv_find_last_one_of(d_string str, d_string sep);
+DMEM_API int dv_find_last_string(d_string str, d_string val);
 
 /* Splits from on the next newline. Returning the line without line endings,
  * and updates from to the remaining string. Will return a null slice if no
@@ -129,41 +128,9 @@ DMEM_INLINE d_slice(char) dv_spit2(d_slice(char)* from, int sep)
  */
 DMEM_API d_string dv_split_line(d_string* from);
 
-#ifdef __cplusplus
-DMEM_INLINE d_slice(char) dv_split_line(d_slice(char)* from)
-{ d_string ret = dv_split_line((d_string*) from); return *(d_slice(char)* &ret; }
-#endif
-
-/* Appends value to v using the seperator if v is non empty */
-DMEM_API void dv_join(d_vector(char)* v, d_string value, int sep);
-
-/* ------------------------------------------------------------------------- */
-
-/* Appends a pretty printed hex data dump of the data in slice. This can be
- * optionally coloured using inline ansi terminal colour commands.
+/* Returns a version of str with both leading and trailing whitespace removed
  */
-DMEM_API void dv_hex_dump(d_vector(char)* s, d_string data, bool colors);
-
-/* Logs the data as a hex to stderr with format and the variable arguments
- * specifying the header.
- */
-DMEM_API void dv_log(d_string data, const char* format, ...);
-
-/* ------------------------------------------------------------------------- */
-
-/* Returns a slice for the null terminated string 'str' */
-DMEM_INLINE d_string dv_char(const char* str)
-{ d_string ret = {str ? (int) strlen(str) : 0, (char*) str}; return ret; }
-
-#ifdef __cplusplus
-DMEM_INLINE d_slice(char) dv_char(char* str)
-{ d_slice(char) ret = {str ? (int) strlen(str) : 0, str}; return ret; }
-
-/* Overload for std::string and compatible interfaces */
-template <class T>
-DMEM_INLINE d_string dv_char(const T& str)
-{ d_string ret = {str.size(), str.c_str()}; return ret; }
-#endif
+DMEM_API d_string dv_strip_whitespace(d_string str);
 
 /* ------------------------------------------------------------------------- */
 
@@ -179,32 +146,11 @@ DMEM_INLINE d_string dv_right(d_string str, int from)
 DMEM_INLINE d_string dv_slice(d_string str, int from, int size)
 { d_string ret = {size, str.data + from}; return ret; }
 
-#ifdef __cplusplus
-DMEM_INLINE d_slice(char) dv_left(d_slice(char) str, int from)
-{ d_slice(char) ret = {from, str.data}; return ret; }
-
-DMEM_INLINE d_slice(char) dv_right(d_slice(char) str, int from)
-{ d_slice(char) ret = {str.size - from, str.data + from}; return ret; }
-
-DMEM_INLINE d_slice(char) dv_slice(d_slice(char) str, int from, int size)
-{ d_slice(char) ret = {size, str.data + from}; return ret; }
-#endif
-
 /* ------------------------------------------------------------------------- */
 
 /* Converts the string slice to a number - see strtod for valid values */
 DMEM_API double dv_to_number(d_string value);
 DMEM_API int dv_to_integer(d_string value, int radix, int def);
-
-/* Converts the boolean slice to a number - valid true values are "true",
- * "TRUE", "1", etc */
-DMEM_API bool dv_to_boolean(d_string value);
-
-DMEM_API d_string dv_strip_whitespace(d_string str);
-#ifdef __cplusplus
-DMEM_INLINE d_slice(char) dv_strip_whitespace(d_slice(char) str)
-{ d_string ret = dv_strip_whitespace(d_string(str)); return *(d_slice(char)*) &ret; }
-#endif
 
 /* ------------------------------------------------------------------------- */
 
@@ -214,17 +160,8 @@ DMEM_API int dv_vprint(d_vector(char)* s, const char* format, va_list ap) DMEM_P
 
 /* ------------------------------------------------------------------------- */
 
-/* Searches for the first occurrence of ch in str. Returing -1 if it can
- * not be found */
-int dv_find_char(d_slice(char) str, int ch);
-int dv_find_string(d_slice(char) str, d_slice(char) val);
-
-/* Searches for the last occurrence of ch in str. Returing -1 if it can not be
- * found */
-int dv_find_last_char(d_slice(char) str, int ch);
-int dv_find_last_string(d_slice(char) str, d_slice(char) val);
-
-/* ------------------------------------------------------------------------- */
+/* The two path functions should only be used for unix style paths with /
+ * seperators */
 
 /* Appends a cleaned version of path to out. */
 DMEM_API void dv_clean_path(d_vector(char)* out, d_string path);

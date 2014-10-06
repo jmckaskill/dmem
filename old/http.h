@@ -39,14 +39,14 @@ DECLARE_DELEGATE_1(MT_HttpDelegate, int, SliceDelegate*);
 DMEM_API MT_Http* MT_NewHttp(MT_BuferedIO* io, MT_HttpDelegate req);
 DMEM_API void MT_FreeHttp(MT_Http* h);
 
-DMEM_API d_Slice(char) MT_GetHttpHeader(MT_Http* h, d_Slice(char) key);
+DMEM_API d_string MT_GetHttpHeader(MT_Http* h, d_string key);
 #define MT_GetHttpMethod(h) MT_GetHttpHeader(h, C("method"))
 #define MT_GetHttpPath(h) MT_GetHttpHeader(h, C("path"))
 
 MT_API void MT_SetHttpCode(MT_Http* h, int code);
-MT_API void MT_SetHttpHeader(MT_Http* h, d_Slice(char) key, d_Slice(char) value);
-MT_API void MT_SetHttpHeader2(MT_Http* h, d_Slice(char) key, int value);
-MT_API void MT_AddHttpFile(MT_Http* h, d_Slice(char) filename);
-MT_API void MT_AddHttpData(MT_Http* h, d_Slice(char) filename);
+MT_API void MT_SetHttpHeader(MT_Http* h, d_string key, d_string value);
+MT_API void MT_SetHttpHeader2(MT_Http* h, d_string key, int value);
+MT_API void MT_AddHttpFile(MT_Http* h, d_string filename);
+MT_API void MT_AddHttpData(MT_Http* h, d_string filename);
 MT_API void MT_SendHttpResponse(MT_Http* h);
 

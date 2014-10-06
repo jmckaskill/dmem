@@ -1,8 +1,23 @@
-.PHONY: all
+.PHONY: all test
 
-CFLAGS = -O2 -Wall -Wno-deprecated-declarations -Wno-unused-function -I. -D_GNU_SOURCE -fPIC
+CC = gcc
+CFLAGS = -g -Wall -Werror -Wno-deprecated-declarations -Wno-unused-function -I. -fPIC
 
-all:
-	rm -rf *.o
-	gcc $(CFLAGS) -c src/*.c
-	gcc $(CFLAGS) -lz -luuid -shared *.o -o libdmem.so
+all: test libdmem.so
+
+clean:
+	rm -f */*.o */*_test.exe *.so
+
+%.o: %.c dmem/*.h src/*.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+libdmem.so: src/vector.o src/char.o
+	$(CC) $(CFLAGS) -shared $^ -o $@
+
+%_test.exe: %_test.o libdmem.so
+	$(CC) $(CFLAGS) -L. -ldmem $< -o $@
+	./$@
+	@echo TEST $@ ALL PASS
+
+test: src/vector_test.exe src/char_test.exe
+

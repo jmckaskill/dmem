@@ -33,37 +33,38 @@
 #include <stdint.h>
 #include <wchar.h>
 
-/* Note that d_Slice(wchar) is a slice of uint16_t not wchar_t. Unfortunately
+/* Note that d_wstring is a slice of uint16_t not wchar_t. Unfortunately
  * wchar_t is defined as uint32_t for UTF32 on some systems. Instead we use
- * uint16_t to force a d_Slice(wchar) to hold UTF16 (and be compatible with
+ * uint16_t to force a d_wstring to hold UTF16 (and be compatible with
  * wchar_t on windows where it is most useful).
  */
 DVECTOR_INIT(wchar, uint16_t);
+typedef d_slice(wchar) d_wstring;
 
 /* ------------------------------------------------------------------------- */
 
 #if WCHAR_MAX == UINT16_MAX
 
-/* Macro to convert wchar string literals to a d_Slice(wchar) */
+/* Macro to convert wchar string literals to a d_wstring */
 #define W(STR) dv_wchar2(L##STR, sizeof(STR) - 1)
 
-/* Convert a null-terminated wchar_t string 'wstr' to a d_Slice(wchar) - only
+/* Convert a null-terminated wchar_t string 'wstr' to a d_wstring - only
  * available on systems with sizeof(wchar_t) == sizeof(uint16_t).
  */
-DMEM_INLINE d_Slice(wchar) dv_wchar(const wchar_t* wstr)
+DMEM_INLINE d_wstring dv_wchar(const wchar_t* wstr)
 {
-    d_Vector(wchar) ret;
+    d_vector(wchar) ret;
     ret.size = wstr ? (int) wcslen(wstr) : 0;
     ret.data = (uint16_t*) wstr;
     return ret;
 }
 
-/* Convert a wchar_t string 'wstr' of length 'sz' to a d_Slice(wchar) - only
+/* Convert a wchar_t string 'wstr' of length 'sz' to a d_wstring - only
  * available on systems with sizeof(wchar_t) == sizeof(uint16_t).
  */
-DMEM_INLINE d_Slice(wchar) dv_wchar2(const wchar_t* wstr, size_t sz)
+DMEM_INLINE d_wstring dv_wchar2(const wchar_t* wstr, size_t sz)
 {
-    d_Vector(wchar) ret;
+    d_vector(wchar) ret;
     ret.size = (int) sz;
     ret.data = (uint16_t*) wstr;
     return ret;
@@ -73,10 +74,10 @@ DMEM_INLINE d_Slice(wchar) dv_wchar2(const wchar_t* wstr, size_t sz)
 
 /* ------------------------------------------------------------------------- */
 
-/* Convert a UTF16 string 'wstr' of length 'sz' to a d_Slice(wchar) */
-DMEM_INLINE d_Slice(wchar) dv_utf16(const uint16_t* wstr, size_t sz)
+/* Convert a UTF16 string 'wstr' of length 'sz' to a d_wstring */
+DMEM_INLINE d_wstring dv_utf16(const uint16_t* wstr, size_t sz)
 {
-    d_Vector(wchar) ret;
+    d_vector(wchar) ret;
     ret.size = (int) sz;
     ret.data = (uint16_t*) wstr;
     return ret;
@@ -85,10 +86,10 @@ DMEM_INLINE d_Slice(wchar) dv_utf16(const uint16_t* wstr, size_t sz)
 /* ------------------------------------------------------------------------- */
 
 /* Appends a UTF8 encoded version of the UTF16 in 'from' to 'str'. */
-DMEM_API void dv_to_utf8(d_Vector(char)* str, d_Slice(wchar) from);
+DMEM_API void dv_to_utf8(d_vector(char)* str, d_wstring from);
 
 /* Appends a UTF16 encoded version of the UTF8 in 'from' to 'wstr'. */
-DMEM_API void dv_to_utf16(d_Vector(wchar)* wstr, d_Slice(char) from);
+DMEM_API void dv_to_utf16(d_vector(wchar)* wstr, d_string from);
 
 /* ------------------------------------------------------------------------- */
 

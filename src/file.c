@@ -42,6 +42,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <errno.h>
+#include <dirent.h>
 #endif
 
 #if _XOPEN_SOURCE >= 700 || _POSIX_C_SOURCE >= 200809L
@@ -50,7 +52,7 @@
 
 /* -------------------------------------------------------------------------- */
 
-int dv_read(d_Vector(char)* v, int fd)
+int dv_read(d_vector(char)* v, int fd)
 {
     int begin = v->size;
     struct stat st;
@@ -66,7 +68,7 @@ int dv_read(d_Vector(char)* v, int fd)
     dv_reserve(v, begin + st.st_size);
 
     for (;;) {
-        int r = read(fd, v->out + v->size, dv_reserved(v) - v->size);
+        int r = read(fd, v->data + v->size, dv_reserved(*v) - v->size);
 
         if (r < 0 && errno == EINTR) {
             r = 0;
@@ -85,7 +87,7 @@ int dv_read(d_Vector(char)* v, int fd)
 
 /* -------------------------------------------------------------------------- */
 
-int dv_read_file(d_Vector(char)* v, d_Slice(char) path, dv_dir* dir)
+int dv_read_file(d_vector(char)* v, d_string path, dv_dir* dir)
 {
     int begin = v->size;
     int fd, ret;
@@ -101,10 +103,10 @@ int dv_read_file(d_Vector(char)* v, d_Slice(char) path, dv_dir* dir)
     if (dir && dir->path.size) {
         dv_clean_path(v, dir->path);
         dv_join_path(v, begin, path);
-        fd = open(v->data + begin, flags);
+        fd = open(v->data + begin, O_RDONLY | O_CLOEXEC);
     } else {
         dv_clean_path(v, path);
-        fd = open(v->data + begin, flags);
+        fd = open(v->data + begin, O_RDONLY | O_CLOEXEC);
     }
 
     dv_resize(v, begin);
@@ -120,11 +122,11 @@ int dv_read_file(d_Vector(char)* v, d_Slice(char) path, dv_dir* dir)
 
 /* -------------------------------------------------------------------------- */
 
-int dv_open_dir(dv_dir* d, d_Slice(char) path)
+int dv_open_dir(d_string path, dv_dir* d)
 {
     DIR* dir;
     int fd = -1;
-    d_Vector(char) v = DV_INIT;
+    d_vector(char) v = DV_INIT;
 
 #ifdef HAVE_OPENAT
     if (dir && dir->fd >= 0) {
@@ -133,8 +135,8 @@ int dv_open_dir(dv_dir* d, d_Slice(char) path)
         dir = fdopendir(fd);
     } else
 #endif
-    if (dir && dir->path.size) {
-        dv_clean_path(&v, dir->path);
+    if (d->path.size) {
+        dv_clean_path(&v, d->path);
         dv_join_path(&v, 0, path);
         dir = opendir(v.data);
     } else {
@@ -144,7 +146,7 @@ int dv_open_dir(dv_dir* d, d_Slice(char) path)
 
     if (dir == NULL) {
         close(fd);
-        dv_free(&v);
+        dv_free(v);
         return -1;
     }
 
@@ -160,7 +162,7 @@ int dv_open_dir(dv_dir* d, d_Slice(char) path)
         dv_free(v);
     }
 
-    return &d->h;
+    return 0;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -168,7 +170,7 @@ int dv_open_dir(dv_dir* d, d_Slice(char) path)
 void dv_close_dir(dv_dir* d)
 {
     if (d) {
-        closedir((DIR*) d->dir);
+        closedir((DIR*) d->u);
         dv_free(d->path);
         close(d->fd);
         free(d);
@@ -177,13 +179,13 @@ void dv_close_dir(dv_dir* d)
 
 /* -------------------------------------------------------------------------- */
 
-bool dv_read_dir(dv_dir* d, d_Slice(char)* file, bool* isdir)
+bool dv_read_dir(dv_dir* d, d_string* file, bool* isdir)
 {
-    DIR* dir = d->dir;
+    DIR* dir = d->u;
     struct dirent* e;
 
 next_file:
-    e = readdir(d->dir);
+    e = readdir(dir);
     if (e == NULL) {
         return false;
     }

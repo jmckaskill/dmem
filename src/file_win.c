@@ -2,16 +2,16 @@
 struct dv_dir_i {
     dv_dir h;
 
-    d_Vector(char) path;
+    d_vector(char) path;
 
 #ifdef _WIN32
-    d_Vector(wchar) wpath;
+    d_vector(wchar) wpath;
     WIN32_FIND_DATAW data;
 #else
     DIR* dir;
 #endif
 };
-int dv_read(d_Vector(char)* v, int fd)
+int dv_read(d_vector(char)* v, int fd)
 {
     int size, begin = v->size;
     DWORD hsz, lsz;
@@ -55,9 +55,9 @@ int dv_read(d_Vector(char)* v, int fd)
 #define ROOT W("\\\\?\\")
 #endif
 
-int dv_append_file_win32(d_Vector(char)* out, d_Slice(wchar) folder, d_Slice(char) relative)
+int dv_append_file_win32(d_vector(char)* out, d_Slice(wchar) folder, d_string relative)
 {
-    d_Vector(wchar) wfilename = DV_INIT;
+    d_vector(wchar) wfilename = DV_INIT;
     DWORD read;
     DWORD dwsize[2];
     uint64_t size;

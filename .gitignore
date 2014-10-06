@@ -1,5 +1,6 @@
 *.o
 *.so
+*.exe
 .AppleDouble
 *.xcodeproj
 *.vcproj

@@ -56,7 +56,7 @@ static bool IsControlChar(char ch)
     return '\0' <= ch && ch < ' ';
 }
 
-static const char* GetString(dj_Parser* parser, dji_Lexer* s, const char* b, const char* e, d_Slice(char)* out)
+static const char* GetString(dj_Parser* parser, dji_Lexer* s, const char* b, const char* e, d_string* out)
 {
     const char* p = b;
     const char* ret = NULL;
@@ -341,7 +341,7 @@ static const char* GetNumber(dj_Parser* parser, dji_Lexer* s, const char* b, con
 
 /* -------------------------------------------------------------------------- */
 
-static const char* GetToken(dj_Parser* parser, dji_Lexer* s, const char* b, const char* e, d_Slice(char)* out)
+static const char* GetToken(dj_Parser* parser, dji_Lexer* s, const char* b, const char* e, d_string* out)
 {
     const char* p = b;
 
@@ -406,11 +406,11 @@ static dji_Scope* PopScope(dj_Parser* p)
 #define UTF8_BOM_2 0xBB
 #define UTF8_BOM_3 0xBF
 
-int dj_parse_chunk(dj_Parser* p, d_Slice(char) str)
+int dj_parse_chunk(dj_Parser* p, d_string str)
 {
     dj_Node node;
     dji_Scope* scope = &p->scopes.data[p->scopes.size - 1];
-    d_Slice(char) token = DV_INIT;
+    d_string token = DV_INIT;
     int ret;
     const char* b = str.data;
     const char* e = b + str.size;
@@ -737,7 +737,7 @@ void dj_free_parser(dj_Parser* p)
     }
 }
 
-d_Slice(char) dj_parse_error(dj_Parser* p)
+d_string dj_parse_error(dj_Parser* p)
 {
     return p->error_string_buffer;
 }
@@ -763,7 +763,7 @@ int dj_parse_complete(dj_Parser* p)
 
 /* -------------------------------------------------------------------------- */
 
-int dj_parse(d_Slice(char) str, dj_Delegate dlg, d_Vector(char)* errstr)
+int dj_parse(d_string str, dj_Delegate dlg, d_vector(char)* errstr)
 {
     int ret;
     dj_Parser p;
@@ -797,7 +797,7 @@ static void AppendNewline(dj_Builder* b)
     memset(buf + 1, ' ', b->depth * 2);
 }
 
-static void AppendString(d_Vector(char)* out, d_Slice(char) str)
+static void AppendString(d_vector(char)* out, d_string str)
 {
     const char* b = str.data;
     const char* p = b;
@@ -923,7 +923,7 @@ void dj_end_array(dj_Builder* b)
 
 /* -------------------------------------------------------------------------- */
 
-void dj_append_key(dj_Builder* b, d_Slice(char) key)
+void dj_append_key(dj_Builder* b, d_string key)
 {
     StartValue(b);
     dv_append(&b->out, C("\""));
@@ -934,7 +934,7 @@ void dj_append_key(dj_Builder* b, d_Slice(char) key)
 
 /* -------------------------------------------------------------------------- */
 
-void dj_append_string(dj_Builder* b, d_Slice(char) value)
+void dj_append_string(dj_Builder* b, d_string value)
 {
     StartValue(b);
     dv_append(&b->out, C("\""));

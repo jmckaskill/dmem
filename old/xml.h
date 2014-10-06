@@ -36,15 +36,15 @@ typedef struct dx_Attribute dx_Attribute;
 typedef struct dx_Builder dx_Builder;
 
 struct dx_Attribute {
-    d_Slice(char) key;
-    d_Slice(char) value;
+    d_string key;
+    d_string value;
 };
 
 DECLARE_DELEGATE_1(dx_Delegate, bool, dx_Node*);
 DVECTOR_INIT(Attribute, dx_Attribute);
 
 struct dx_Node {
-    d_Slice(char)       value;
+    d_string       value;
     d_Slice(Attribute)  attributes;
     dx_Delegate         on_element;
     dx_Delegate         on_inner_xml;
@@ -53,19 +53,19 @@ struct dx_Node {
 
 #define dx_Bind(func, obj) BIND1(dx_Delegate, func, obj, dx_Node**)
 
-DMEM_API bool dx_parse(d_Slice(char) str, dx_Delegate dlg, d_Vector(char)* errstr);
+DMEM_API bool dx_parse(d_string str, dx_Delegate dlg, d_vector(char)* errstr);
 
 DMEM_API dx_Parser* dx_new_parser(dx_Delegate dlg);
-DMEM_API d_Slice(char) dx_parse_error(dx_Parser* p);
+DMEM_API d_string dx_parse_error(dx_Parser* p);
 DMEM_API void dx_free_parser(dx_Parser* p);
-DMEM_API int dx_parse_chunk(dx_Parser* p, d_Slice(char) str);
+DMEM_API int dx_parse_chunk(dx_Parser* p, d_string str);
 
-DMEM_API d_Slice(char) dx_attribute(const dx_Node* element, d_Slice(char) name);
-DMEM_API bool dx_boolean_attribute(const dx_Node* element, d_Slice(char) name);
-DMEM_API double dx_number_attribute(const dx_Node* element, d_Slice(char) name);
+DMEM_API d_string dx_attribute(const dx_Node* element, d_string name);
+DMEM_API bool dx_boolean_attribute(const dx_Node* element, d_string name);
+DMEM_API double dx_number_attribute(const dx_Node* element, d_string name);
 
 struct dx_Builder {
-    d_Vector(char) out;
+    d_vector(char) out;
     bool in_element;
 };
 
@@ -73,16 +73,16 @@ DMEM_API void dx_init_builder(dx_Builder* b);
 DMEM_API void dx_clear_builder(dx_Builder* b);
 DMEM_API void dx_destroy_builder(dx_Builder* b);
 
-DMEM_API void dx_start_element(dx_Builder* b, d_Slice(char) tag);
-DMEM_API void dx_end_element(dx_Builder* b, d_Slice(char) tag);
+DMEM_API void dx_start_element(dx_Builder* b, d_string tag);
+DMEM_API void dx_end_element(dx_Builder* b, d_string tag);
 
-DMEM_API void dx_append_attribute(dx_Builder* b, d_Slice(char) key, d_Slice(char) value);
-DMEM_API void dx_append_number_attribute(dx_Builder* b, d_Slice(char) key, double value);
-DMEM_API void dx_append_boolean_attribute(dx_Builder* b, d_Slice(char) key, bool value);
+DMEM_API void dx_append_attribute(dx_Builder* b, d_string key, d_string value);
+DMEM_API void dx_append_number_attribute(dx_Builder* b, d_string key, double value);
+DMEM_API void dx_append_boolean_attribute(dx_Builder* b, d_string key, bool value);
 
-DMEM_API void dx_append_xml(dx_Builder* b, d_Slice(char) text);
-DMEM_API void dx_append_text(dx_Builder* b, d_Slice(char) text);
+DMEM_API void dx_append_xml(dx_Builder* b, d_string text);
+DMEM_API void dx_append_text(dx_Builder* b, d_string text);
 
-DMEM_API void dv_append_xml_encoded(d_Vector(char)* b, d_Slice(char) text);
-DMEM_API void dv_append_xml_decoded(d_Vector(char)* b, d_Slice(char) text);
+DMEM_API void dv_append_xml_encoded(d_vector(char)* b, d_string text);
+DMEM_API void dv_append_xml_decoded(d_vector(char)* b, d_string text);
 
