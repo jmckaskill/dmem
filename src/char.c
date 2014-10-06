@@ -39,6 +39,7 @@
 
 #ifndef _WIN32
 #include <unistd.h>
+#include <errno.h>
 #endif
 
 #ifdef _MSC_VER
@@ -616,6 +617,29 @@ void dv_join_path(d_vector(char)* v, int off, d_string rel)
 
 void dv_clean_path(d_vector(char)* v, d_string path)
 { dv_join_path(v, v->size, path); }
+
+/* -------------------------------------------------------------------------- */
+
+int dv_current_directory(d_vector(char)* v)
+{
+    size_t off = v->size;
+    size_t sz = 128;
+    for (;;) {
+        dv_reserve(v, off + sz);
+        char* p = getcwd(&v->data[off], sz);
+        if (p == NULL && errno == ERANGE) {
+            sz *= 2;
+            continue;
+        } else if (p == NULL) {
+            return -1;
+        } else {
+            sz = strlen(p);
+            dv_resize(v, off + sz);
+            return (int) sz;
+        }
+    }
+
+}
 
 /* -------------------------------------------------------------------------- */
 

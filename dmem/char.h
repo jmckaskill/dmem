@@ -110,13 +110,13 @@ DMEM_API d_string dv_split_char(d_string* from, int sep);
 DMEM_API d_string dv_split_one_of(d_string* from, d_string sep);
 DMEM_API d_string dv_split_string(d_string* from, d_string sep);
 
-/* Searches for the first occurrence of ch in str. Returing -1 if it can
+/* Searches for the first occurrence of ch in str. Returning -1 if it can
  * not be found */
 DMEM_API int dv_find_char(d_string str, int ch);
 DMEM_API int dv_find_one_of(d_string str, d_string sep);
 DMEM_API int dv_find_string(d_string str, d_string val);
 
-/* Searches for the last occurrence of ch in str. Returing -1 if it can not be
+/* Searches for the last occurrence of ch in str. Returning -1 if it can not be
  * found */
 DMEM_API int dv_find_last_char(d_string str, int ch);
 DMEM_API int dv_find_last_one_of(d_string str, d_string sep);
@@ -171,4 +171,8 @@ DMEM_API void dv_clean_path(d_vector(char)* out, d_string path);
  * the path in out. Finally the resulting path is cleaned.
  */
 DMEM_API void dv_join_path(d_vector(char)* out, int off, d_string rel);
+
+/* Appends the current working directory into out. Returns length of current
+ * directory or -1 on error. */
+DMEM_API int dv_current_directory(d_vector(char)* out);
 
